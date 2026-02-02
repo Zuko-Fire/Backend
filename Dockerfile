@@ -1,34 +1,41 @@
-# backend/Dockerfile
+# Этап 1: Сборка
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Копируем только зависимости
-COPY package.json yarn.lock ./
+# Копируем зависимости
+COPY package*.json ./
 
-# Устанавливаем только production-зависимости (важно!)
-RUN yarn install --production --frozen-lockfile
+# Устанавливаем ВСЁ (включая devDependencies для сборки)
+RUN yarn install --frozen-lockfile && yarn cache clean --force
 
-# Копируем исходники
+# Копируем исходный код
 COPY . .
 
 # Собираем приложение
 RUN yarn build
 
-# === Production stage ===
-FROM node:22-alpine
+
+# Этап 2: Запуск
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Устанавливаем только production-зависимости
-COPY package.json yarn.lock ./
-RUN yarn install --production --frozen-lockfile
+# Устанавливаем зависимости ОТ ROOT (пока есть права)
+COPY --from=builder /app/package*.json ./
+RUN yarn install --production --frozen-lockfile && yarn cache clean --force
 
-# Копируем собранный бандл
+# Копируем собранный код
 COPY --from=builder /app/dist ./dist
 
-EXPOSE 3000
+# Создаём пользователя и передаём владение
+RUN addgroup -g 1001 -S nodejs \
+    && adduser -u 1001 -S nestjs -G nodejs \
+    && chown -R nestjs:nodejs /app
 
-USER node
+# Переключаемся на непривилегированного пользователя
+USER nestjs
+
+EXPOSE 3000
 
 CMD ["node", "dist/main"]
