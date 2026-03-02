@@ -24,6 +24,12 @@ $ docker compose up
 
 
 ```
+
+## Endpoints 
+
+- http://localhost:3000/api swagger 
+- http://localhost:5050 pgadmin
+- http://localhost:5432 postgres 
 ## О нас
 
 - Author - [Us Daniil](https://vk.com/zuko_f)
