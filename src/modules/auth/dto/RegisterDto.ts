@@ -11,7 +11,11 @@ export class RegisterDto {
   @IsNotEmpty()
   name: string | undefined;
 
-  @ApiProperty({ description: 'Password - minimum 6 characters', minLength: 6 })
+  @ApiProperty({
+    description: 'Password - minimum 6 characters',
+    minLength: 6,
+    example: 'password1234',
+  })
   @MinLength(6)
   password: string | undefined;
 }
