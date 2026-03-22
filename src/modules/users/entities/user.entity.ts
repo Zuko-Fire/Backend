@@ -10,9 +10,11 @@ import {
   OneToMany,
   BeforeInsert,
   BeforeUpdate,
+  OneToOne,
 } from 'typeorm';
 
 import * as bcrypt from 'bcrypt';
+import { UserRoles } from './user-roles.entity';
 
 @Entity('users')
 export class User {
@@ -64,4 +66,8 @@ export class User {
     if (!this.password) return false;
     return bcrypt.compare(plainPassword, this.password);
   }
+
+  @OneToMany(() => UserRoles, (ur) => ur.user)
+  userRoles!: UserRoles[];
+
 }

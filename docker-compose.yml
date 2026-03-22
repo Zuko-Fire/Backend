@@ -4,10 +4,9 @@ services:
   # -----------------------
   db:
     # Используем образ с поддержкой ARM64 и векторными расширениями
-    image: pgvector/pgvector:pg16
+    image: postgis/postgis:16-3.4
     container_name: app_postgis
     restart: unless-stopped
-    platform: linux/arm64
     ports:
       - "${POSTGRES_PORT}:5432"
     environment:
