@@ -17,6 +17,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ResponseRegisterDto } from './dto/ResponseRegisterDto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -44,6 +45,7 @@ export class AuthController {
   @ApiResponse({
     status: 201,
     description: 'User created and tokens returned.',
+    type: ResponseRegisterDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid input or email taken.' })
   register(@Body() dto: RegisterDto) {
