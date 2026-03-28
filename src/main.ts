@@ -10,6 +10,11 @@ async function bootstrap() {
     .setTitle('SA server API')
     .setDescription('SA API')
     .setVersion('1.0')
+    .addTag('Projects', 'Управление проектами')
+    .addTag('Polygons', 'Геометрия и полигоны (PostGIS)')
+    .addTag('LandPlots', 'Земельные участки')
+    .addTag('Project Members', 'Участники проектов')
+    .addTag('Map Views', 'Сохранённые виды карты')
     .addTag('SA')
     .addBearerAuth(
       {

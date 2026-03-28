@@ -6,6 +6,7 @@ import { LandPlot } from './entitiest/land-plot.entity';
 import { MapView } from './entitiest/map-view.entity';
 import { Polygon } from './entitiest/polygon.entity';
 import { ProjectMembers } from './entitiest/project-members.entity';
+import { ProjectService } from './project.service';
 
 @Module({
   controllers: [ProjectController],
@@ -18,5 +19,6 @@ import { ProjectMembers } from './entitiest/project-members.entity';
       ProjectMembers,
     ]),
   ],
+  providers: [ProjectService],
 })
 export class ProjectModule {}
