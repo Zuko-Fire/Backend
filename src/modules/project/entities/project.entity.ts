@@ -40,9 +40,9 @@ export class Project {
   @DeleteDateColumn()
   deletedAt?: Date;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, (user) => user.ownedProjects)
   @JoinColumn({ name: 'owner_id' })
-  owner!: User;
+  owner: User | undefined;
 
   @OneToMany(() => Polygon, (p) => p.project)
   polygons!: Polygon[];

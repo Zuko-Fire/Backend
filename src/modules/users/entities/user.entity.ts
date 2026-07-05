@@ -15,9 +15,12 @@ import {
 
 import * as bcrypt from 'bcrypt';
 import { UserRoles } from './user-roles.entity';
+import { ProjectMembers } from 'src/modules/project/entities/project-members.entity';
+import { Project } from 'src/modules/project/entities/project.entity';
 
 @Entity('users')
 export class User {
+  [x: string]: any;
   @PrimaryGeneratedColumn()
   id: number | undefined;
   @Column({ unique: true })
@@ -70,4 +73,9 @@ export class User {
   @OneToMany(() => UserRoles, (ur) => ur.user)
   userRoles!: UserRoles[];
 
+  @OneToMany(() => Project, (p) => p?.owner)
+  ownedProjects: Project[] | undefined;
+
+  @OneToMany(() => ProjectMembers, (pm) => pm.user)
+  projectMemberships: ProjectMembers[] | undefined;
 }

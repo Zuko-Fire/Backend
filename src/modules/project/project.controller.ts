@@ -1,5 +1,3 @@
-// src/modules/projects/projects.controller.ts
-
 import {
   Controller,
   UseGuards,
@@ -41,24 +39,24 @@ import { User } from 'src/common/decorators/auth/user.decorator';
 import { UserDto } from '../users/dto/UserDto';
 
 @ApiTags('Projects')
-@ApiBearerAuth('JWT')
+@ApiBearerAuth('access-token')
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectController {
   constructor(private projectsService: ProjectService) {}
 
+  // ==================== 🎯 ГЛАВНЫЙ ЭНДПОИНТ: Доступные проекты ====================
+
   @Get()
   @ApiOperation({
-    summary: 'Получить список проектов',
-    description:
-      'Возвращает пагинированный список всех проектов с возможностью фильтрации по владельцу',
+    summary: 'Получить доступные проекты',
+    description: 'Возвращает проекты где пользователь = владелец ИЛИ участник',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
-  @ApiQuery({ name: 'owner_id', required: false, type: Number, example: 1 })
   @ApiResponse({
     status: 200,
-    description: 'Список проектов получен успешно',
+    description: 'Список доступных проектов',
     schema: {
       type: 'object',
       properties: {
@@ -69,6 +67,7 @@ export class ProjectController {
         total: { type: 'number', example: 100 },
         page: { type: 'number', example: 1 },
         limit: { type: 'number', example: 10 },
+        totalPages: { type: 'number', example: 10 },
       },
     },
   })
@@ -76,29 +75,52 @@ export class ProjectController {
   async findAll(
     @Query('page') page = 1,
     @Query('limit') limit = 10,
-    @Query('owner_id') ownerId?: number,
+    @User() user: UserDto,
   ) {
-    return this.projectsService.findAll(
-      +page,
-      +limit,
-      ownerId ? +ownerId : undefined,
-    );
+    return this.projectsService.findAccessibleProjects(user.id!, +page, +limit);
   }
+
+  // ==================== Только мои проекты (владелец) ====================
 
   @Get('my')
   @ApiOperation({
-    summary: 'Получить мои проекты',
+    summary: 'Получить мои проекты (только владелец)',
     description:
-      'Возвращает проекты, где текущий пользователь является владельцем',
+      'Возвращает проекты где текущий пользователь является владельцем',
   })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiResponse({
     status: 200,
     description: 'Список проектов владельца',
-    type: [Object],
   })
-  async findMyProjects(@User() user: UserDto) {
-    return this.projectsService.findMyProjects(user.id!);
+  async findMyProjects(
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findOwnedProjects(user.id!, +page, +limit);
   }
+
+  // ==================== Проекты где я участник ====================
+
+  @Get('member')
+  @ApiOperation({
+    summary: 'Проекты где я участник',
+    description: 'Возвращает проекты где пользователь добавлен как участник',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({ status: 200, description: 'Список проектов' })
+  async findMemberProjects(
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findMemberProjects(user.id!, +page, +limit);
+  }
+
+  // ==================== Проект по ID ====================
 
   @Get(':id')
   @ApiOperation({
@@ -114,9 +136,11 @@ export class ProjectController {
   })
   @ApiResponse({ status: 404, description: 'Проект не найден' })
   @ApiResponse({ status: 403, description: 'Нет доступа к проекту' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @User() user: UserDto) {
+    return this.projectsService.findOne(id, user.id);
   }
+
+  // ==================== Создать проект ====================
 
   @Post()
   @ApiOperation({
@@ -133,6 +157,8 @@ export class ProjectController {
   async create(@Body() dto: CreateProjectDto, @User() user: UserDto) {
     return this.projectsService.create(dto, user.id!);
   }
+
+  // ==================== Обновить проект ====================
 
   @Put(':id')
   @ApiOperation({
@@ -152,9 +178,12 @@ export class ProjectController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateProjectDto,
+    @User() user: UserDto,
   ) {
-    return this.projectsService.update(id, dto);
+    return this.projectsService.update(id, dto, user.id!);
   }
+
+  // ==================== Удалить проект ====================
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -166,8 +195,8 @@ export class ProjectController {
   @ApiResponse({ status: 204, description: 'Проект удалён' })
   @ApiResponse({ status: 404, description: 'Проект не найден' })
   @ApiResponse({ status: 403, description: 'Нет прав на удаление' })
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number, @User() user: UserDto) {
+    return this.projectsService.remove(id, user.id!);
   }
 
   // ==================== POLYGONS ====================
@@ -187,8 +216,11 @@ export class ProjectController {
       items: { $ref: '#/components/schemas/Polygon' },
     },
   })
-  async findPolygons(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findPolygons(id);
+  async findPolygons(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findPolygons(id, user.id);
   }
 
   @ApiTags('Polygons')
@@ -206,6 +238,7 @@ export class ProjectController {
   })
   @ApiResponse({ status: 400, description: 'Некорректный GeoJSON' })
   @ApiResponse({ status: 404, description: 'Проект не найден' })
+  @ApiResponse({ status: 403, description: 'Нет прав' })
   async createPolygon(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreatePolygonDto,
@@ -232,8 +265,11 @@ export class ProjectController {
     schema: { $ref: '#/components/schemas/Polygon' },
   })
   @ApiResponse({ status: 404, description: 'Полигон не найден' })
-  async findPolygon(@Param('polygonId', ParseIntPipe) polygonId: number) {
-    return this.projectsService.findPolygon(polygonId);
+  async findPolygon(
+    @Param('polygonId', ParseIntPipe) polygonId: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findPolygon(polygonId, user.id);
   }
 
   @ApiTags('Polygons')
@@ -249,11 +285,13 @@ export class ProjectController {
     description: 'Полигон обновлён',
     schema: { $ref: '#/components/schemas/Polygon' },
   })
+  @ApiResponse({ status: 403, description: 'Нет прав' })
   async updatePolygon(
     @Param('polygonId', ParseIntPipe) polygonId: number,
     @Body() dto: UpdatePolygonDto,
+    @User() user: UserDto,
   ) {
-    return this.projectsService.updatePolygon(polygonId, dto);
+    return this.projectsService.updatePolygon(polygonId, dto, user.id!);
   }
 
   @ApiTags('Polygons')
@@ -266,8 +304,12 @@ export class ProjectController {
   @ApiParam({ name: 'polygonId', type: Number, example: 1 })
   @ApiResponse({ status: 204, description: 'Полигон удалён' })
   @ApiResponse({ status: 404, description: 'Полигон не найден' })
-  async removePolygon(@Param('polygonId', ParseIntPipe) polygonId: number) {
-    return this.projectsService.removePolygon(polygonId);
+  @ApiResponse({ status: 403, description: 'Нет прав' })
+  async removePolygon(
+    @Param('polygonId', ParseIntPipe) polygonId: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.removePolygon(polygonId, user.id!);
   }
 
   // ==================== GEO SEARCH ====================
@@ -304,7 +346,10 @@ export class ProjectController {
       items: { $ref: '#/components/schemas/Polygon' },
     },
   })
-  async findPolygonsNear(@Query() dto: GeoNearSearchDto) {
+  async findPolygonsNear(
+    @Query() dto: GeoNearSearchDto,
+    @User() user: UserDto,
+  ) {
     if (dto.radius > 100000) {
       throw new BadRequestException('Максимальный радиус 100км');
     }
@@ -312,6 +357,7 @@ export class ProjectController {
       dto.lat,
       dto.lon,
       dto.radius,
+      user.id,
     );
   }
 
@@ -331,8 +377,11 @@ export class ProjectController {
       items: { $ref: '#/components/schemas/Polygon' },
     },
   })
-  async findPolygonsIntersects(@Body() dto: GeoSearchDto) {
-    return this.projectsService.findPolygonsInArea(dto);
+  async findPolygonsIntersects(
+    @Body() dto: GeoSearchDto,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findPolygonsInArea(dto, user.id);
   }
 
   // ==================== LAND PLOTS ====================
@@ -358,8 +407,11 @@ export class ProjectController {
       items: { $ref: '#/components/schemas/LandPlot' },
     },
   })
-  async findLandPlots(@Query('cadastral_number') cadastral?: string) {
-    return this.projectsService.findLandPlots(cadastral);
+  async findLandPlots(
+    @Query('cadastral_number') cadastral?: string,
+    @User() user?: UserDto,
+  ) {
+    return this.projectsService.findLandPlots(cadastral, user?.id);
   }
 
   @ApiTags('LandPlots')
@@ -375,8 +427,8 @@ export class ProjectController {
     schema: { $ref: '#/components/schemas/LandPlot' },
   })
   @ApiResponse({ status: 409, description: 'Кадастровый номер уже существует' })
-  async createLandPlot(@Body() dto: CreateLandPlotDto) {
-    return this.projectsService.createLandPlot(dto);
+  async createLandPlot(@Body() dto: CreateLandPlotDto, @User() user: UserDto) {
+    return this.projectsService.createLandPlot(dto, user.id);
   }
 
   @ApiTags('LandPlots')
@@ -392,8 +444,11 @@ export class ProjectController {
     schema: { $ref: '#/components/schemas/LandPlot' },
   })
   @ApiResponse({ status: 404, description: 'Участок не найден' })
-  async findLandPlot(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findLandPlot(id);
+  async findLandPlot(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findLandPlot(id, user.id);
   }
 
   // ==================== PROJECT MEMBERS ====================
@@ -413,8 +468,11 @@ export class ProjectController {
       items: { $ref: '#/components/schemas/ProjectMember' },
     },
   })
-  async findMembers(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findMembers(id);
+  async findMembers(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findMembers(id, user.id);
   }
 
   @ApiTags('Project Members')
@@ -431,11 +489,13 @@ export class ProjectController {
     schema: { $ref: '#/components/schemas/ProjectMember' },
   })
   @ApiResponse({ status: 409, description: 'Пользователь уже в проекте' })
+  @ApiResponse({ status: 403, description: 'Нет прав' })
   async addMember(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AddMemberDto,
+    @User() user: UserDto,
   ) {
-    return this.projectsService.addMember(id, dto);
+    return this.projectsService.addMember(id, dto, user.id!);
   }
 
   @ApiTags('Project Members')
@@ -449,11 +509,13 @@ export class ProjectController {
   @ApiParam({ name: 'userId', type: Number, example: 5 })
   @ApiResponse({ status: 204, description: 'Участник удалён' })
   @ApiResponse({ status: 404, description: 'Участник не найден' })
+  @ApiResponse({ status: 403, description: 'Нет прав' })
   async removeMember(
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) userId: number,
+    @User() user: UserDto,
   ) {
-    return this.projectsService.removeMember(id, userId);
+    return this.projectsService.removeMember(id, userId, user.id!);
   }
 
   // ==================== MAP VIEWS ====================
@@ -473,8 +535,11 @@ export class ProjectController {
       items: { $ref: '#/components/schemas/MapView' },
     },
   })
-  async findMapViews(@Param('id', ParseIntPipe) id: number) {
-    return this.projectsService.findMapViews(id);
+  async findMapViews(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.findMapViews(id, user.id);
   }
 
   @ApiTags('Map Views')

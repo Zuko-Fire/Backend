@@ -1,22 +1,24 @@
 import { Module } from '@nestjs/common';
 import { ProjectController } from './project.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Project } from './entitiest/project.entity';
-import { LandPlot } from './entitiest/land-plot.entity';
-import { MapView } from './entitiest/map-view.entity';
-import { Polygon } from './entitiest/polygon.entity';
-import { ProjectMembers } from './entitiest/project-members.entity';
+import { Project } from './entities/project.entity';
+import { LandPlot } from './entities/land-plot.entity';
+import { MapView } from './entities/map-view.entity';
+import { Polygon } from './entities/polygon.entity';
+import { ProjectMembers } from './entities/project-members.entity';
 import { ProjectService } from './project.service';
+import { User } from '../users/entities/user.entity';
 
 @Module({
   controllers: [ProjectController],
   imports: [
     TypeOrmModule.forFeature([
       Project,
-      LandPlot,
-      MapView,
       Polygon,
       ProjectMembers,
+      MapView,
+      LandPlot,
+      User,
     ]),
   ],
   providers: [ProjectService],
