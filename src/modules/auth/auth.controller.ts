@@ -1,5 +1,13 @@
 // auth/auth.controller.ts
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Roles } from 'src/common/decorators/auth/roles.decorator';
 import { User } from 'src/common/decorators/auth/user.decorator';
@@ -19,6 +27,8 @@ import {
 } from '@nestjs/swagger';
 import { ResponseRegisterDto } from './dto/ResponseRegisterDto';
 
+import type { Response } from 'express';
+
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
@@ -33,10 +43,14 @@ export class AuthController {
     description: 'Returns access and refresh tokens.',
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
-  login(@Body() _dto: LoginDto, @User() user: UserDto) {
+  login(
+    @Body() _dto: LoginDto,
+    @User() user: UserDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     // request should have { email, password }
 
-    return this.authService.login(user);
+    return this.authService.login(user, res);
   }
 
   @Post('register')
@@ -48,8 +62,11 @@ export class AuthController {
     type: ResponseRegisterDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid input or email taken.' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.authService.register(dto, res);
   }
 
   @Post('refresh')
@@ -60,8 +77,8 @@ export class AuthController {
     status: 401,
     description: 'Invalid or expired refresh token.',
   })
-  refresh(@Body() dto: RefreshDto) {
-    return this.authService.refreshToken(dto.refresh_token!);
+  refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return this.authService.refreshToken(res, req);
   }
 
   @Get('profile')

@@ -10,15 +10,22 @@ import { RegisterDto } from './dto/RegisterDto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RefreshToken } from './entities/refresh-token.entity';
+import type { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { isDev } from 'src/common/utils/is-dev';
 
 @Injectable()
 export class AuthService {
+  private readonly COOKIE_DOMAIN: string;
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepo: Repository<RefreshToken>,
-  ) {}
+  ) {
+    this.COOKIE_DOMAIN = configService.get<string>('COOKIE_DOMAIN')!;
+  }
 
   async validateUser(
     username: string,
@@ -37,7 +44,7 @@ export class AuthService {
       return null;
     }
   }
-  async login(user: UserDto) {
+  async login(user: UserDto, res: Response) {
     const payload = {
       name: user.name,
       sub: user.id,
@@ -54,14 +61,13 @@ export class AuthService {
       expiresAt,
       revoked: false,
     });
-
+    this.setCookies(res, refreshToken, expiresAt);
     return {
       access_token: accessToken,
-      refresh_token: refreshToken,
     };
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, res: Response) {
     if (!dto.email || !dto.password || !dto.name) {
       throw new BadRequestException('Email, name and password are required');
     }
@@ -96,16 +102,16 @@ export class AuthService {
       revoked: false,
     });
 
+    this.setCookies(res, refreshToken, expiresAt);
     return {
       ...result,
       access_token: accessToken,
-      refresh_token: refreshToken,
     };
   }
-  async refreshToken(token: string) {
-    // verify JWT first
+  async refreshToken(res: Response, req: Request) {
     try {
-      const decoded: unknown = this.jwtService.verify(token) ?? null;
+      const { refresh_token: token } = this.getCookies(req);
+      const decoded: unknown = this.jwtService.verify(token ?? '') ?? null;
       if (!decoded || typeof decoded !== 'object' || !('sub' in decoded)) {
         throw new UnauthorizedException('Invalid refresh token');
       }
@@ -146,10 +152,30 @@ export class AuthService {
         revoked: false,
       });
 
-      return { access_token, refresh_token };
+      this.setCookies(res, refresh_token, expiresAt);
+      return { access_token };
     } catch (e) {
       console.error('Error refreshing token', e);
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+  private setCookies(res: Response, value: string, expire: Date) {
+    res.cookie('refrashtoken', value, {
+      httpOnly: true,
+      secure: isDev(this.configService),
+      sameSite: isDev(this.configService) ? 'none' : 'lax',
+      expires: expire,
+      domain: this.COOKIE_DOMAIN,
+    });
+  }
+  private getCookies(req: Request) {
+    const cookies = (req.headers.get('Cookie') || '').split(';');
+    if (cookies.length === 0) return {};
+    const refreshTokenCookie = cookies.find((c) =>
+      c.startsWith('refrashtoken='),
+    );
+    if (!refreshTokenCookie) return {};
+    const [, value] = refreshTokenCookie.split('=');
+    return { refresh_token: value };
   }
 }

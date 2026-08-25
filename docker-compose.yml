@@ -81,7 +81,7 @@ services:
     container_name: app_backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT}:3000"
+      - "${BACKEND_PORT}:4000"
     environment:
       NODE_ENV: ${NODE_ENV}
       DB_HOST: ${DB_HOST}
