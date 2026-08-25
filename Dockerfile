@@ -29,8 +29,11 @@ RUN yarn install --production --frozen-lockfile && yarn cache clean --force
 # Копируем собранный код
 COPY --from=builder /app/dist ./dist
 
-# Копируем data-source.ts для миграций (если он нужен)
-COPY --from=builder /app/src/data-source.ts ./dist/data-source.js 2>/dev/null || true
+# ✅ ИСПРАВЛЕНИЕ: Используем RUN с условием вместо COPY с bash-хаками
+# Если файл существует в src, копируем его в dist (для TypeORM миграций)
+RUN if [ -f /app/src/data-source.ts ]; then \
+    cp /app/src/data-source.ts ./dist/data-source.js; \
+    fi
 
 # Создаём непривилегированного пользователя
 RUN addgroup -g 1001 -S nodejs \
