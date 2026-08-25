@@ -35,7 +35,7 @@ import { AppService } from './app.service';
           autoLoadEntities: true, // ← Добавлено
           logging: nodeEnv === 'development',
           // Опционально: SSL для production
-          ssl: nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
+          ssl: false,
         };
 
         // Валидация обязательных переменных
