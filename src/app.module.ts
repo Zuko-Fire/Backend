@@ -31,11 +31,14 @@ import { AppService } from './app.service';
           entities: ['dist/**/*.entity{.ts,.js}'],
           migrations: ['dist/migrations/*{.ts,.js}'],
           migrationsRun: false,
-          synchronize: true,
+          synchronize: false,
           autoLoadEntities: true, // ← Добавлено
           logging: nodeEnv === 'development',
           // Опционально: SSL для production
-          ssl: nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
+          ssl: false,
+          extra: {
+            ssl: false, // Дополнительная защита для драйвера pg
+          },
         };
 
         // Валидация обязательных переменных
