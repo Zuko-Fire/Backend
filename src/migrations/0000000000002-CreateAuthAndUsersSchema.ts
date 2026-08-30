@@ -1,4 +1,3 @@
-// src/migrations/0000000000002-CreateAuthAndUsersSchema.ts
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateAuthAndUsersSchema0000000000002 implements MigrationInterface {
@@ -11,17 +10,20 @@ export class CreateAuthAndUsersSchema0000000000002 implements MigrationInterface
         "id" SERIAL PRIMARY KEY,
         "name" VARCHAR NOT NULL,
         "email" VARCHAR UNIQUE NOT NULL,
-        "passwordHash" VARCHAR NOT NULL,
-        "type" VARCHAR NOT NULL CHECK ("type" IN ('client', 'employee')),
-        "active" BOOLEAN DEFAULT true,
-        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+        "password" VARCHAR NOT NULL,
+        "isActive" BOOLEAN DEFAULT true,
+        "roles" TEXT,
+        "avatar" VARCHAR,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "deletedAt" TIMESTAMP
       )
     `);
     await queryRunner.query(
       `CREATE INDEX "idx_users_email" ON "users" ("email")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "idx_users_type_active" ON "users" ("type", "active")`,
+      `CREATE INDEX "idx_users_isActive" ON "users" ("isActive")`,
     );
 
     // === ROLES ===
@@ -49,13 +51,11 @@ export class CreateAuthAndUsersSchema0000000000002 implements MigrationInterface
       )
     `);
     await queryRunner.query(`
-      ALTER TABLE "user_roles" 
-      ADD CONSTRAINT "fk_user_roles_user" 
+      ALTER TABLE "user_roles" ADD CONSTRAINT "fk_user_roles_user" 
       FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE
     `);
     await queryRunner.query(`
-      ALTER TABLE "user_roles" 
-      ADD CONSTRAINT "fk_user_roles_role" 
+      ALTER TABLE "user_roles" ADD CONSTRAINT "fk_user_roles_role" 
       FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE
     `);
     await queryRunner.query(
@@ -74,13 +74,11 @@ export class CreateAuthAndUsersSchema0000000000002 implements MigrationInterface
       )
     `);
     await queryRunner.query(`
-      ALTER TABLE "role_permissions" 
-      ADD CONSTRAINT "fk_role_permissions_role" 
+      ALTER TABLE "role_permissions" ADD CONSTRAINT "fk_role_permissions_role" 
       FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE
     `);
     await queryRunner.query(`
-      ALTER TABLE "role_permissions" 
-      ADD CONSTRAINT "fk_role_permissions_permission" 
+      ALTER TABLE "role_permissions" ADD CONSTRAINT "fk_role_permissions_permission" 
       FOREIGN KEY ("permission_id") REFERENCES "permissions"("id") ON DELETE CASCADE
     `);
     await queryRunner.query(
@@ -95,22 +93,21 @@ export class CreateAuthAndUsersSchema0000000000002 implements MigrationInterface
       CREATE TABLE "refresh_tokens" (
         "id" SERIAL PRIMARY KEY,
         "token" VARCHAR UNIQUE NOT NULL,
-        "user_id" INTEGER NOT NULL,
+        "userId" INTEGER NOT NULL,
         "expiresAt" TIMESTAMP NOT NULL,
         "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
         "revoked" BOOLEAN DEFAULT false
       )
     `);
     await queryRunner.query(`
-      ALTER TABLE "refresh_tokens" 
-      ADD CONSTRAINT "fk_refresh_tokens_user" 
-      FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE
+      ALTER TABLE "refresh_tokens" ADD CONSTRAINT "fk_refresh_tokens_user" 
+      FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE
     `);
     await queryRunner.query(
       `CREATE INDEX "idx_refresh_tokens_token" ON "refresh_tokens" ("token")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "idx_refresh_tokens_user" ON "refresh_tokens" ("user_id")`,
+      `CREATE INDEX "idx_refresh_tokens_user" ON "refresh_tokens" ("userId")`,
     );
 
     console.log('✅ Auth & Users schema created');
@@ -123,7 +120,6 @@ export class CreateAuthAndUsersSchema0000000000002 implements MigrationInterface
     await queryRunner.query(`DROP TABLE IF EXISTS "permissions"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "roles"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "users"`);
-
     console.log('🔄 Auth & Users schema dropped');
   }
 }

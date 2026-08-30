@@ -17,7 +17,9 @@ export class UsersService {
     return user;
   }
   async validatePassword(user: UserDto, password: string) {
-    const userEntity = await this.userRepo.findOne({ where: { email: user.email } });
+    const userEntity = await this.userRepo.findOne({
+      where: { email: user.email },
+    });
     if (!userEntity) return false;
     try {
       const match = await userEntity.comparePassword(password);
