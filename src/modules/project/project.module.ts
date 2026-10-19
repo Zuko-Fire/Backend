@@ -6,6 +6,7 @@ import { LandPlot } from './entities/land-plot.entity';
 import { MapView } from './entities/map-view.entity';
 import { Polygon } from './entities/polygon.entity';
 import { ProjectMembers } from './entities/project-members.entity';
+import { Document } from './entities/document.entity';
 import { ProjectService } from './project.service';
 import { User } from '../users/entities/user.entity';
 
@@ -19,8 +20,10 @@ import { User } from '../users/entities/user.entity';
       MapView,
       LandPlot,
       User,
+      Document,
     ]),
   ],
   providers: [ProjectService],
+  exports: [ProjectService],
 })
 export class ProjectModule {}

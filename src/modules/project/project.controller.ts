@@ -35,6 +35,9 @@ import {
   CreateMapViewDto,
 } from './dto';
 import { ProjectService } from './project.service';
+import { ProjectStatus } from './entities/project.entity';
+import { DocumentType } from './entities/document.entity';
+import { Document } from './entities/document.entity';
 import { User } from 'src/common/decorators/auth/user.decorator';
 import { UserDto } from '../users/dto/UserDto';
 
@@ -561,5 +564,118 @@ export class ProjectController {
     @User() user: UserDto,
   ) {
     return this.projectsService.saveMapView(id, dto, user.id!);
+  }
+
+  // ==================== STATUS WORKFLOW ====================
+
+  @ApiTags('Project Status')
+  @Put(':id/status')
+  @ApiOperation({
+    summary: 'Изменить статус проекта',
+    description:
+      'Управление жизненным циклом проекта: черновик → на проверке → утверждён/возвращён',
+  })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { status: { enum: ['draft', 'in_review', 'approved', 'returned'] } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Статус изменён' })
+  @ApiResponse({ status: 400, description: 'Недопустимый переход статуса' })
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: { status: ProjectStatus },
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.updateProjectStatus(id, dto.status, user.id!);
+  }
+
+  @ApiTags('Project Status')
+  @Post(':id/copy')
+  @ApiOperation({
+    summary: 'Сохранить копию проекта',
+    description: 'Создаёт копию проекта с новым ID и статусом черновика',
+  })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiResponse({ status: 201, description: 'Проект скопирован' })
+  async saveProjectCopy(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.saveProjectCopy(id, user.id!);
+  }
+
+  // ==================== DOCUMENTS ====================
+
+  @ApiTags('Documents')
+  @Post(':id/documents')
+  @ApiOperation({ summary: 'Загрузить документ в проект' })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        type: { type: 'string', enum: ['assignment', 'right_document', 'extract_egrp', 'boundary_agreement', 'survey_data', 'photo', 'other'] },
+        filePath: { type: 'string' },
+        fileSize: { type: 'number', nullable: true },
+        mimeType: { type: 'string', nullable: true },
+        description: { type: 'string', nullable: true },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Документ загружен' })
+  async uploadDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: {
+      name: string;
+      type: DocumentType;
+      filePath: string;
+      fileSize?: number;
+      mimeType?: string;
+      description?: string;
+    },
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.uploadDocument(id, dto, user.id!);
+  }
+
+  @ApiTags('Documents')
+  @Get(':id/documents')
+  @ApiOperation({ summary: 'Получить документы проекта' })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiResponse({ status: 200, description: 'Список документов' })
+  async getProjectDocuments(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.getProjectDocuments(id, user.id!);
+  }
+
+  @ApiTags('Documents')
+  @Get('documents/:documentId')
+  @ApiOperation({ summary: 'Получить документ по ID' })
+  @ApiParam({ name: 'documentId', type: Number, example: 1 })
+  @ApiResponse({ status: 200, description: 'Документ найден' })
+  async getDocument(
+    @Param('documentId', ParseIntPipe) documentId: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.getDocumentById(documentId, user.id!);
+  }
+
+  @ApiTags('Documents')
+  @Delete('documents/:documentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Удалить документ' })
+  @ApiParam({ name: 'documentId', type: Number, example: 1 })
+  @ApiResponse({ status: 204, description: 'Документ удалён' })
+  async deleteDocument(
+    @Param('documentId', ParseIntPipe) documentId: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.deleteDocument(documentId, user.id!);
   }
 }

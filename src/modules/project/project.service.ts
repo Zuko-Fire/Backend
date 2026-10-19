@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -13,7 +14,8 @@ import {
   ProjectMembers,
   ProjectMemberRole,
 } from './entities/project-members.entity';
-import { Project } from './entities/project.entity';
+import { Project, ProjectStatus } from './entities/project.entity';
+import { Document, DocumentType } from './entities/document.entity';
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -485,5 +487,157 @@ export class ProjectService {
     }
 
     return true;
+  }
+
+  // ==================== Статус проекта (Workflow) ====================
+
+  async updateProjectStatus(
+    projectId: number,
+    status: ProjectStatus,
+    userId: number,
+  ) {
+    const project = await this.projectRepo.findOne({ where: { id: projectId } });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    // Только владелец или главный инженер может менять статус
+    const isOwner = project.owner_id === userId;
+    const member = await this.membersRepo.findOne({
+      where: { projectId, userId },
+    });
+    const isLeadEngineer = member?.roleInProject === ProjectMemberRole.ADMIN;
+
+    if (!isOwner && !isLeadEngineer) {
+      throw new ForbiddenException('Only owner or lead engineer can change status');
+    }
+
+    // Валидация переходов статусов
+    const validTransitions: Record<ProjectStatus, ProjectStatus[]> = {
+      [ProjectStatus.DRAFT]: [ProjectStatus.IN_REVIEW, ProjectStatus.DRAFT],
+      [ProjectStatus.IN_REVIEW]: [ProjectStatus.APPROVED, ProjectStatus.RETURNED, ProjectStatus.IN_REVIEW],
+      [ProjectStatus.APPROVED]: [ProjectStatus.DRAFT, ProjectStatus.IN_REVIEW],
+      [ProjectStatus.RETURNED]: [ProjectStatus.DRAFT, ProjectStatus.IN_REVIEW],
+    };
+
+    const allowed = validTransitions[project.status];
+    if (!allowed.includes(status)) {
+      throw new BadRequestException(
+        `Invalid status transition from ${project.status} to ${status}`,
+      );
+    }
+
+    project.status = status;
+    await this.projectRepo.save(project);
+
+    return project;
+  }
+
+  async saveProjectCopy(projectId: number, userId: number) {
+    const project = await this.projectRepo.findOne({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const copy = this.projectRepo.create({
+      name: `${project.name} (копия)`,
+      description: project.description,
+      picture: project.picture,
+      status: ProjectStatus.DRAFT,
+      owner_id: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const saved = await this.projectRepo.save(copy);
+
+    // Назначить пользователя админом копии
+    await this.membersRepo.save({
+      projectId: saved.id,
+      userId,
+      role_in_project: ProjectMemberRole.ADMIN,
+    });
+
+    return this.findOne(saved.id, userId);
+  }
+
+  // ==================== Документы ====================
+
+  async uploadDocument(
+    projectId: number,
+    dto: {
+      name: string;
+      type: DocumentType;
+      filePath: string;
+      fileSize?: number;
+      mimeType?: string;
+      description?: string;
+    },
+    userId: number,
+  ) {
+    await this.checkProjectAccess(projectId, userId);
+
+    const documentEntity = new Document();
+    documentEntity.name = dto.name;
+    documentEntity.type = dto.type;
+    documentEntity.filePath = dto.filePath;
+    documentEntity.fileSize = dto.fileSize || null;
+    documentEntity.mimeType = dto.mimeType || null;
+    documentEntity.project_id = projectId;
+    documentEntity.land_plot_id = null;
+    documentEntity.uploaded_by = userId;
+    documentEntity.description = dto.description || null;
+
+    const saved = await Document.save(documentEntity);
+    return saved;
+  }
+
+  async getProjectDocuments(projectId: number, userId: number) {
+    await this.checkProjectAccess(projectId, userId);
+
+    return Document.find({
+      where: { project_id: projectId },
+      relations: ['uploader'],
+      order: { uploadedAt: 'DESC' },
+    });
+  }
+
+  async getDocumentById(documentId: number, userId: number) {
+    const doc = await Document.findOne({
+      where: { id: documentId },
+      relations: ['uploader', 'project'],
+    });
+
+    if (!doc) {
+      throw new NotFoundException('Document not found');
+    }
+
+    if (doc.project_id) {
+      await this.checkProjectAccess(doc.project_id, userId);
+    }
+
+    return doc;
+  }
+
+  async deleteDocument(documentId: number, userId: number) {
+    const doc = await Document.findOne({
+      where: { id: documentId },
+      relations: ['project'],
+    });
+
+    if (!doc) {
+      throw new NotFoundException('Document not found');
+    }
+
+    if (doc.project_id) {
+      await this.checkProjectAccess(doc.project_id, userId, ['admin']);
+    } else {
+      throw new ForbiddenException('Cannot delete document without project');
+    }
+
+    await Document.delete(documentId);
+    return { message: 'Document deleted successfully' };
   }
 }

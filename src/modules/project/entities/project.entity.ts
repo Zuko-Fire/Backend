@@ -13,6 +13,14 @@ import {
 import { Polygon } from './polygon.entity';
 import { MapView } from './map-view.entity';
 import { ProjectMembers } from './project-members.entity';
+import { Document } from './document.entity';
+
+export enum ProjectStatus {
+  DRAFT = 'draft', // Черновик
+  IN_REVIEW = 'in_review', // На проверке
+  APPROVED = 'approved', // Утвержден
+  RETURNED = 'returned', // Возвращен на доработку
+}
 
 @Entity('projects')
 export class Project {
@@ -22,11 +30,18 @@ export class Project {
   @Column()
   name!: string;
 
-  @Column({ type: 'text' })
-  description!: string;
+  @Column({ type: 'text', nullable: true })
+  description!: string | null;
 
   @Column({ nullable: true })
-  picture!: string;
+  picture!: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: ProjectStatus,
+    default: ProjectStatus.DRAFT,
+  })
+  status!: ProjectStatus;
 
   @Column()
   owner_id!: number;
@@ -52,4 +67,7 @@ export class Project {
 
   @OneToMany(() => ProjectMembers, (pm) => pm.project)
   members!: ProjectMembers[];
+
+  @OneToMany(() => Document, (doc) => doc.project)
+  documents!: Document[];
 }
