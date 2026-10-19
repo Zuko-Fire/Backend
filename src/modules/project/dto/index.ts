@@ -94,8 +94,16 @@ export class CreatePolygonDto {
   landPlotId?: number;
 }
 // update-polygon.dto.ts
+
 export class UpdatePolygonDto {
+  @ApiPropertyOptional({ description: 'Название полигона' })
+  @IsString()
+  @IsOptional()
   name?: string;
+
+  @ApiPropertyOptional({ description: 'GeoJSON координаты' })
+  @IsObject()
+  @IsOptional()
   coordinates?: GeoJSON;
 }
 

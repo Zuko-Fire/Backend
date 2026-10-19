@@ -1,6 +1,7 @@
 import * as typeorm from 'typeorm';
 import { LandPlot } from './land-plot.entity';
 import { Project } from './project.entity';
+import type { GeoJSON } from 'typeorm';
 
 @typeorm.Entity('polygons')
 export class Polygon {
@@ -14,7 +15,10 @@ export class Polygon {
   name!: string;
 
   @typeorm.Column({ type: 'jsonb' })
-  coordinates!: typeorm.GeoJSON;
+  coordinates!: GeoJSON;
+
+  @typeorm.Column({ type: 'geometry', spatialFeatureType: 'Polygon', srid: 4326, nullable: true })
+  geometry!: string;
 
   @typeorm.Column()
   created_by!: number;
@@ -37,4 +41,19 @@ export class Polygon {
 
   @typeorm.OneToMany(() => LandPlot, (lp) => lp.polygon)
   landPlots!: LandPlot[];
+
+  @typeorm.AfterLoad()
+  private loadGeometry(): void {
+    if (this.coordinates && !this.geometry) {
+      this.geometry = JSON.stringify(this.coordinates);
+    }
+  }
+
+  @typeorm.BeforeInsert()
+  @typeorm.BeforeUpdate()
+  private syncGeometry(): void {
+    if (this.coordinates && typeof this.coordinates === 'object') {
+      this.geometry = JSON.stringify(this.coordinates);
+    }
+  }
 }

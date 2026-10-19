@@ -197,7 +197,9 @@ export class ProjectService {
       relations: ['project', 'landPlots'],
     });
 
-    if (!polygon) throw new NotFoundException('Polygon not found');
+    if (!polygon || polygon.deletedAt) {
+      throw new NotFoundException('Polygon not found');
+    }
 
     // ← snake_case: project_id
     if (userId && polygon.project_id) {
@@ -228,7 +230,9 @@ export class ProjectService {
       where: { id },
       relations: ['project'],
     });
-    if (!polygon) throw new NotFoundException('Polygon not found');
+    if (!polygon || polygon.deletedAt) {
+      throw new NotFoundException('Polygon not found');
+    }
 
     await this.checkProjectAccess(polygon.project_id, userId, [
       'admin',
@@ -245,7 +249,9 @@ export class ProjectService {
       where: { id },
       relations: ['project'],
     });
-    if (!polygon) throw new NotFoundException('Polygon not found');
+    if (!polygon || polygon.deletedAt) {
+      throw new NotFoundException('Polygon not found');
+    }
 
     await this.checkProjectAccess(polygon.project_id, userId, ['admin']);
 
@@ -311,22 +317,19 @@ export class ProjectService {
       .createQueryBuilder('landPlot')
       .leftJoinAndSelect('landPlot.polygon', 'polygon');
 
-    if (cadastral) {
+    const projectAccessCondition =
+      '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))';
+
+    if (cadastral && userId) {
+      queryBuilder
+        .where('landPlot.cadastral_number = :cadastral', { cadastral })
+        .andWhere(projectAccessCondition, { userId });
+    } else if (cadastral) {
       queryBuilder.where('landPlot.cadastral_number = :cadastral', {
         cadastral,
       });
-    }
-
-    if (userId && cadastral) {
-      queryBuilder.andWhere(
-        '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))',
-        { userId },
-      );
     } else if (userId) {
-      queryBuilder.where(
-        '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))',
-        { userId },
-      );
+      queryBuilder.where(projectAccessCondition, { userId });
     }
 
     return queryBuilder.getMany();
@@ -347,14 +350,27 @@ export class ProjectService {
   }
 
   async createLandPlot(dto: CreateLandPlotDto, userId?: number) {
-    if (userId && dto.polygon_id) {
-      await this.checkProjectAccess(dto.polygon_id, userId, [
+    let polygonProjectId: number | null = null;
+
+    if (dto.polygon_id) {
+      const polygon = await this.polygonRepo.findOne({
+        where: { id: dto.polygon_id },
+        relations: ['project'],
+      });
+      if (!polygon) {
+        throw new NotFoundException('Polygon not found');
+      }
+      polygonProjectId = polygon.project_id;
+      await this.checkProjectAccess(polygon.project_id, userId!, [
         'admin',
         'editor',
       ]);
     }
 
-    const plot = this.landPlotRepo.create(dto);
+    const plot = this.landPlotRepo.create({
+      ...dto,
+      polygon_id: dto.polygon_id || null,
+    });
     return this.landPlotRepo.save(plot);
   }
 

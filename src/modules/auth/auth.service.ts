@@ -111,7 +111,15 @@ export class AuthService {
   async refreshToken(res: Response, req: Request) {
     try {
       const { refresh_token: token } = this.getCookies(req);
-      const decoded: unknown = this.jwtService.verify(token ?? '') ?? null;
+      if (!token) {
+        throw new UnauthorizedException('Refresh token not found');
+      }
+      let decoded: any;
+      try {
+        decoded = this.jwtService.verify(token);
+      } catch {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
       if (!decoded || typeof decoded !== 'object' || !('sub' in decoded)) {
         throw new UnauthorizedException('Invalid refresh token');
       }
@@ -137,7 +145,7 @@ export class AuthService {
       await this.refreshTokenRepo.save(stored);
 
       const payload = {
-        username: user.name,
+        name: user.name,
         sub: user.id,
         roles: user.roles,
       };
@@ -153,14 +161,14 @@ export class AuthService {
       });
 
       this.setCookies(res, refresh_token, expiresAt);
-      return { access_token };
+      return { access_token, refresh_token };
     } catch (e) {
       console.error('Error refreshing token', e);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
   private setCookies(res: Response, value: string, expire: Date) {
-    res.cookie('refrashtoken', value, {
+    res.cookie('refreshtoken', value, {
       httpOnly: true,
       secure: isDev(this.configService),
       sameSite: isDev(this.configService) ? 'none' : 'lax',
@@ -169,10 +177,12 @@ export class AuthService {
     });
   }
   private getCookies(req: Request) {
-    const cookies = (req.headers.get('Cookie') || '').split(';');
-    if (cookies.length === 0) return {};
-    const refreshTokenCookie = cookies.find((c) =>
-      c.startsWith('refrashtoken='),
+    const headers = req.headers as any;
+    const cookieHeader = (headers.cookie as string) || '';
+    if (!cookieHeader) return {};
+    const cookies = cookieHeader.split(';');
+    const refreshTokenCookie = cookies.find((c: string) =>
+      c.trim().startsWith('refreshtoken='),
     );
     if (!refreshTokenCookie) return {};
     const [, value] = refreshTokenCookie.split('=');
