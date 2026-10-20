@@ -19,7 +19,7 @@ export class ReferenceDataService {
     private precisionStandardRepo: Repository<PrecisionStandard>,
   ) {}
 
-  // === Land Categories ===
+  // ==================== Land Categories ====================
 
   async findAllLandCategories() {
     return this.landCategoryRepo.find({
@@ -33,12 +33,8 @@ export class ReferenceDataService {
     code?: string;
     description?: string;
   }) {
-    const existing = await this.landCategoryRepo.findOne({
-      where: { name: data.name },
-    });
-    if (existing) {
-      throw new Error('Land category already exists');
-    }
+    await this.ensureUnique(this.landCategoryRepo, { name: data.name });
+
     const category = this.landCategoryRepo.create({
       ...data,
       isActive: true,
@@ -46,10 +42,10 @@ export class ReferenceDataService {
     return this.landCategoryRepo.save(category);
   }
 
-  // === Permitted Uses ===
+  // ==================== Permitted Uses ====================
 
   async findAllPermittedUses(landCategoryId?: number) {
-    const where: any = { isActive: true };
+    const where: Record<string, unknown> = { isActive: true };
     if (landCategoryId) {
       where.landCategoryId = landCategoryId;
     }
@@ -61,17 +57,13 @@ export class ReferenceDataService {
     landCategoryId?: number;
     description?: string;
   }) {
-    const existing = await this.permittedUseRepo.findOne({
-      where: { name: data.name },
-    });
-    if (existing) {
-      throw new Error('Permitted use already exists');
-    }
+    await this.ensureUnique(this.permittedUseRepo, { name: data.name });
+
     const use = this.permittedUseRepo.create({ ...data, isActive: true });
     return this.permittedUseRepo.save(use);
   }
 
-  // === Boundary Marker Types ===
+  // ==================== Boundary Marker Types ====================
 
   async findAllBoundaryMarkerTypes() {
     return this.boundaryMarkerTypeRepo.find({
@@ -85,12 +77,12 @@ export class ReferenceDataService {
     description?: string;
     materialRequirements?: string;
   }) {
-    const existing = await this.boundaryMarkerTypeRepo.findOne({
-      where: { name: data.name },
-    });
-    if (existing) {
-      throw new Error('Boundary marker type already exists');
-    }
+    await this.ensureUnique(
+      this.boundaryMarkerTypeRepo,
+      { name: data.name },
+      'Boundary marker type',
+    );
+
     const marker = this.boundaryMarkerTypeRepo.create({
       ...data,
       isActive: true,
@@ -98,7 +90,7 @@ export class ReferenceDataService {
     return this.boundaryMarkerTypeRepo.save(marker);
   }
 
-  // === Precision Standards ===
+  // ==================== Precision Standards ====================
 
   async findAllPrecisionStandards() {
     return this.precisionStandardRepo.find({
@@ -127,12 +119,12 @@ export class ReferenceDataService {
     allowedPointDeviation: number;
     note?: string;
   }) {
-    const existing = await this.precisionStandardRepo.findOne({
-      where: { landCategory: data.landCategory },
-    });
-    if (existing) {
-      throw new Error(`Precision standard already exists for: ${data.landCategory}`);
-    }
+    await this.ensureUnique(
+      this.precisionStandardRepo,
+      { landCategory: data.landCategory },
+      'Precision standard',
+    );
+
     const standard = this.precisionStandardRepo.create({
       ...data,
       isActive: true,
@@ -140,9 +132,33 @@ export class ReferenceDataService {
     return this.precisionStandardRepo.save(standard);
   }
 
-  // === Initialize Default Data ===
+  // ==================== Initialize Defaults ====================
 
   async initializeDefaults() {
+    await this.initLandCategories();
+    await this.initPrecisionStandards();
+  }
+
+  // ==================== Private Helpers ====================
+
+  /**
+   * Ensures no duplicate record exists with the given where clause
+   */
+  private async ensureUnique(
+    repo: Repository<any>,
+    where: Record<string, string>,
+    entityType = 'Item',
+  ) {
+    const existing = await repo.findOne({ where });
+    if (existing) {
+      throw new Error(`${entityType} already exists`);
+    }
+  }
+
+  /**
+   * Seeds default land categories
+   */
+  private async initLandCategories() {
     const defaults = [
       {
         name: 'Земли сельскохозяйственного назначения',
@@ -167,13 +183,20 @@ export class ReferenceDataService {
     ];
 
     for (const d of defaults) {
-      const existing = await this.landCategoryRepo.findOne({ where: { name: d.name } });
+      const existing = await this.landCategoryRepo.findOne({
+        where: { name: d.name },
+      });
       if (!existing) {
         await this.landCategoryRepo.save({ ...d, isActive: true });
       }
     }
+  }
 
-    const precisionDefaults = [
+  /**
+   * Seeds default precision standards
+   */
+  private async initPrecisionStandards() {
+    const defaults = [
       {
         landCategory: 'Земли сельскохозяйственного назначения',
         maxAccuracyMt: 2.5,
@@ -200,7 +223,7 @@ export class ReferenceDataService {
       },
     ];
 
-    for (const d of precisionDefaults) {
+    for (const d of defaults) {
       const existing = await this.precisionStandardRepo.findOne({
         where: { landCategory: d.landCategory },
       });

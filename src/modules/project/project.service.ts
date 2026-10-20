@@ -26,6 +26,17 @@ import {
   AddMemberDto,
   CreateMapViewDto,
 } from './dto';
+import {
+  sanitizeOwner,
+  sanitizeMemberUser,
+} from 'src/common/utils/sanitize';
+import { paginate } from 'src/common/utils/pagination';
+import {
+  POSTGIS_SRID,
+  MAX_SEARCH_RADIUS_METERS,
+  STATUS_TRANSITIONS,
+  DB,
+} from 'src/common/constants';
 
 @Injectable()
 export class ProjectService {
@@ -41,33 +52,18 @@ export class ProjectService {
 
   async findAccessibleProjects(userId: number, page = 1, limit = 10) {
     const [projects, total] = await this.projectRepo.findAndCount({
-      where: [{ owner_id: userId }, { members: { userId } }],
+      where: [{ [DB.PROJECT.OWNER_ID]: userId }, { members: { userId } }],
       relations: ['owner', 'members', 'members.user'],
       skip: (page - 1) * limit,
       take: limit,
       order: { updatedAt: 'DESC' },
     });
 
-    // Sanitize owner data - remove password
-    const sanitizedProjects = projects.map((project) => {
-      const { password, ...sanitizedOwner } = project.owner || {};
-      return {
-        ...project,
-        owner: sanitizedOwner || undefined,
-        members: project.members?.map((member) => {
-          const { password: memberPassword, ...sanitizedUser } = member.user || {};
-          return { ...member, user: sanitizedUser || undefined };
-        }),
-      };
-    });
+    const sanitizedProjects = projects.map((project) =>
+      this.sanitizeProjectWithMembers(project as any),
+    );
 
-    return {
-      data: sanitizedProjects,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return paginate(sanitizedProjects, total, page, limit);
   }
   // ==================== Только проекты владельца ====================
 
@@ -76,7 +72,7 @@ export class ProjectService {
       .createQueryBuilder('project')
       .leftJoinAndSelect('project.owner', 'owner')
       .leftJoinAndSelect('project.polygons', 'polygons')
-      .where('project.owner_id = :userId', { userId })
+      .where(`project.${DB.PROJECT.OWNER_ID} = :userId`, { userId })
       .andWhere('project.deleted_at IS NULL')
       .skip((page - 1) * limit)
       .take(limit)
@@ -84,21 +80,12 @@ export class ProjectService {
 
     const [projects, total] = await queryBuilder.getManyAndCount();
 
-    // Sanitize owner data - remove password
-    const sanitizedProjects = projects.map((project) => {
-      const { password, ...sanitizedOwner } = project.owner || {};
-      return {
-        ...project,
-        owner: sanitizedOwner || undefined,
-      };
-    });
+    const sanitizedProjects = projects.map((project) => ({
+      ...project,
+      owner: sanitizeOwner(project.owner as any),
+    }));
 
-    return {
-      data: sanitizedProjects,
-      total,
-      page,
-      limit,
-    };
+    return paginate(sanitizedProjects, total, page, limit);
   }
 
   // ==================== Только проекты где участник ====================
@@ -117,24 +104,17 @@ export class ProjectService {
 
     const [memberships, total] = await queryBuilder.getManyAndCount();
 
-    // Sanitize owner data - remove password
     const sanitizedData = memberships.map((pm) => {
       const project = pm.project as any;
-      const { password, ...sanitizedOwner } = project.owner || {};
       return {
         ...project,
-        owner: sanitizedOwner || undefined,
+        owner: sanitizeOwner(project.owner),
         memberRole: pm.roleInProject,
         joinedAt: pm.joinedAt,
       };
     });
 
-    return {
-      data: sanitizedData,
-      total,
-      page,
-      limit,
-    };
+    return paginate(sanitizedData, total, page, limit);
   }
 
   // ==================== Проект по ID с проверкой доступа ====================
@@ -146,12 +126,12 @@ export class ProjectService {
       .leftJoinAndSelect('project.polygons', 'polygons')
       .leftJoinAndSelect('project.members', 'members')
       .leftJoinAndSelect('members.user', 'memberUser')
-      .where('project.id = :id', { id })
+      .where(`project.${DB.PROJECT.ID} = :id`, { id })
       .andWhere('project.deleted_at IS NULL');
 
     if (userId) {
       queryBuilder.andWhere(
-        '(project.owner_id = :userId OR members.user_id = :userId)',
+        `(project.${DB.PROJECT.OWNER_ID} = :userId OR members.user_id = :userId)`,
         { userId },
       );
     }
@@ -162,39 +142,63 @@ export class ProjectService {
       throw new NotFoundException('Project not found or access denied');
     }
 
-    // Sanitize all user data - remove passwords
-    const sanitizedProject = this.sanitizeProject(project);
-    return sanitizedProject;
+    return this.sanitizeProject(project);
   }
 
-  // Helper method to sanitize user data
-  private sanitizeProject(project: any): any {
-    const { password: ownerPassword, ...sanitizedOwner } = project.owner || {};
+  // ==================== Вспомогательные методы ====================
 
+  /**
+   * Sanitizes all user data in a project (owner, members, land plots)
+   */
+  private sanitizeProject(project: any): any {
     return {
       ...project,
-      owner: sanitizedOwner || undefined,
-      polygons: project.polygons?.map((polygon: any) => {
-        const sanitizedLandPlots = polygon.landPlots?.map((lp: any) => {
-          const { password: lpPassword, ...sanitizedPolygon } = lp.polygon || {};
-          return {
-            ...lp,
-            polygon: sanitizedPolygon || undefined,
-          };
-        }) || [];
-        return {
-          ...polygon,
-          landPlots: sanitizedLandPlots,
-        };
-      }),
-      members: project.members?.map((member: any) => {
-        const { password: memberPassword, ...sanitizedUser } = member.user || {};
-        return {
-          ...member,
-          user: sanitizedUser || undefined,
-        };
-      }),
+      owner: sanitizeOwner(project.owner),
+      polygons: project.polygons?.map((polygon: any) => ({
+        ...polygon,
+        landPlots: polygon.landPlots?.map((lp: any) => ({
+          ...lp,
+          polygon: sanitizeOwner(lp.polygon),
+        })) || [],
+      })),
+      members: project.members?.map((member: any) =>
+        sanitizeMemberUser(member),
+      ),
     };
+  }
+
+  /**
+   * Sanitizes project with members (for findAccessibleProjects)
+   */
+  private sanitizeProjectWithMembers(project: any): any {
+    return {
+      ...project,
+      owner: sanitizeOwner(project.owner),
+      members: project.members?.map((member: any) =>
+        sanitizeMemberUser(member),
+      ),
+    };
+  }
+
+  /**
+   * Generates WKT POLYGON string from GeoJSON coordinates
+   */
+  private generateWktFromGeoJSON(coordinates: number[][][]): string {
+    const wktPoints = coordinates[0]
+      .map((p: number[]) => `${p[0]} ${p[1]}`)
+      .join(', ');
+    return `POLYGON((${wktPoints}))`;
+  }
+
+  /**
+   * Serializes GeoJSON coordinates to JSON string
+   */
+  private serializeCoordinates(dto: CreatePolygonDto | UpdatePolygonDto): string {
+    const coordsAny = dto.coordinates as any;
+    return JSON.stringify({
+      type: coordsAny.type,
+      coordinates: coordsAny.coordinates,
+    });
   }
 
   // ==================== CRUD Проектов ====================
@@ -202,26 +206,23 @@ export class ProjectService {
   async create(dto: CreateProjectDto, ownerId: number) {
     const project = this.projectRepo.create({
       ...dto,
-      owner_id: ownerId, // ← snake_case
+      [DB.PROJECT.OWNER_ID]: ownerId,
     });
 
     const saved = await this.projectRepo.save(project);
 
-    // Создатель автоматически становится участником с ролью admin
+    // Creator becomes admin automatically
     await this.membersRepo.save({
-      projectId: saved.id, // ← snake_case
+      projectId: saved.id,
       userId: ownerId,
-      role_in_project: ProjectMemberRole.ADMIN, // ← enum из entity
+      role_in_project: ProjectMemberRole.ADMIN,
     });
 
-    const projectWithOwner = await this.findOne(saved.id, ownerId);
-    return projectWithOwner;
+    return this.findOne(saved.id, ownerId);
   }
 
   async update(id: number, dto: UpdateProjectDto, userId: number) {
     await this.checkProjectAccess(id, userId, ['admin', 'editor']);
-
-    // ← snake_case: updated_at
     await this.projectRepo.update(id, { ...dto, updatedAt: new Date() });
     return this.findOne(id, userId);
   }
@@ -232,8 +233,7 @@ export class ProjectService {
       throw new NotFoundException('Project not found');
     }
 
-    // ← snake_case: owner_id
-    if (project.owner_id !== userId) {
+    if ((project as any)[DB.PROJECT.OWNER_ID] !== userId) {
       throw new ForbiddenException('Only owner can delete project');
     }
 
@@ -280,19 +280,11 @@ export class ProjectService {
   ) {
     await this.checkProjectAccess(projectId, userId, ['admin', 'editor']);
 
-    // Store coordinates as string to bypass TypeORM GeoJSON validation
-    const coordsAny = dto.coordinates as any;
-    const coordinatesStr = JSON.stringify({
-      type: coordsAny.type,
-      coordinates: coordsAny.coordinates,
-    });
+    const coordinatesStr = this.serializeCoordinates(dto);
+    const geometryWkt = this.generateWktFromGeoJSON(
+      (dto.coordinates as any).coordinates,
+    );
 
-    // Generate WKT geometry from GeoJSON
-    const coords = coordsAny.coordinates[0] as number[][];
-    const wktPoints = coords.map((p: number[]) => `${p[0]} ${p[1]}`).join(', ');
-    const geometryWkt = `POLYGON((${wktPoints}))`;
-
-    // Use raw SQL to bypass TypeORM GeoJSON validation
     const result = await this.polygonRepo.query(
       `INSERT INTO polygons (name, coordinates, project_id, created_by, updated_by, geometry, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -311,43 +303,38 @@ export class ProjectService {
       throw new NotFoundException('Polygon not found');
     }
 
-    await this.checkProjectAccess(polygon.project_id, userId, [
+    await this.checkProjectAccess((polygon as any)[DB.POLYGON.PROJECT_ID], userId, [
       'admin',
       'editor',
     ]);
 
-    // Build update query
     const updates: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
 
     if (dto.name !== undefined) {
-      updates.push(`name = $${paramIndex++}`);
+      updates.push(`name = $${paramIndex}`);
       params.push(dto.name);
+      paramIndex++;
     }
 
     if (dto.coordinates !== undefined) {
-      const coordsAny = dto.coordinates as any;
-      const coordinatesStr = JSON.stringify({
-        type: coordsAny.type,
-        coordinates: coordsAny.coordinates,
-      });
-      updates.push(`coordinates = $${paramIndex++}`);
-      params.push(coordinatesStr);
+      const coordinatesStr = this.serializeCoordinates(dto);
+      const geometryWkt = this.generateWktFromGeoJSON(
+        (dto.coordinates as any).coordinates,
+      );
 
-      // Generate WKT geometry from GeoJSON
-      const coords = coordsAny.coordinates[0] as number[][];
-      const wktPoints = coords.map((p: number[]) => `${p[0]} ${p[1]}`).join(', ');
-      const geometryWkt = `POLYGON((${wktPoints}))`;
-      updates.push(`geometry = $${paramIndex++}`);
-      params.push(geometryWkt);
+      updates.push(`coordinates = $${paramIndex}, geometry = $${paramIndex + 1}`);
+      params.push(coordinatesStr, geometryWkt);
+      paramIndex += 2;
     }
 
-    updates.push(`updated_by = $${paramIndex++}, updated_at = NOW()`);
+    updates.push(`updated_by = $${paramIndex}, updated_at = NOW()`);
     params.push(userId);
+    paramIndex++;
 
-    params.push(id);
     updates.push(`id = $${paramIndex}`);
+    params.push(id);
 
     await this.polygonRepo.query(
       `UPDATE polygons SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
@@ -380,10 +367,16 @@ export class ProjectService {
     radius: number,
     userId?: number,
   ) {
+    if (radius > MAX_SEARCH_RADIUS_METERS) {
+      throw new BadRequestException(
+        `Radius cannot exceed ${MAX_SEARCH_RADIUS_METERS} meters`,
+      );
+    }
+
     const query = this.polygonRepo.createQueryBuilder('polygon').where(
       `ST_DWithin(
           polygon.geometry::geometry,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${POSTGIS_SRID}),
           :radius
         )`,
       { lat, lon, radius },
@@ -391,7 +384,7 @@ export class ProjectService {
 
     if (userId) {
       query.andWhere(
-        '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))',
+        `(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))`,
         { userId },
       );
     }
@@ -430,15 +423,14 @@ export class ProjectService {
       .createQueryBuilder('landPlot')
       .leftJoinAndSelect('landPlot.polygon', 'polygon');
 
-    // If cadastral number is provided, search by it
     if (cadastral) {
-      queryBuilder.where('landPlot.cadastral_number = :cadastral', { cadastral });
-    }
-
-    // If user is provided and no cadastral filter, apply access control
-    if (userId && !cadastral) {
+      queryBuilder.where(
+        `landPlot.${DB.LAND_PLOT.CADASTRAL_NUMBER} = :cadastral`,
+        { cadastral },
+      );
+    } else if (userId) {
       const projectAccessCondition =
-        '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))';
+        `(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))`;
       queryBuilder.andWhere(projectAccessCondition, { userId });
     }
 
@@ -452,8 +444,12 @@ export class ProjectService {
     });
     if (!plot) throw new NotFoundException('Land plot not found');
 
-    if (userId && plot.polygon?.project_id) {
-      await this.checkProjectAccess(plot.polygon.project_id, userId);
+    const polygon = plot.polygon as any | undefined;
+    if (userId && polygon?.[DB.POLYGON.PROJECT_ID]) {
+      await this.checkProjectAccess(
+        polygon[DB.POLYGON.PROJECT_ID] as number,
+        userId,
+      );
     }
 
     return plot;
@@ -463,14 +459,14 @@ export class ProjectService {
     // Check for duplicate cadastral number
     if (dto.cadastral_number) {
       const existing = await this.landPlotRepo.findOne({
-        where: { cadastral_number: dto.cadastral_number },
+        where: { [DB.LAND_PLOT.CADASTRAL_NUMBER]: dto.cadastral_number },
       });
       if (existing) {
         throw new BadRequestException('Кадастровый номер уже существует');
       }
     }
 
-    // If polygon_id is provided, check access to the polygon's project
+    // Check access to the polygon's project if polygon_id is provided
     if (dto.polygon_id) {
       const polygon = await this.polygonRepo.findOne({
         where: { id: dto.polygon_id },
@@ -479,18 +475,22 @@ export class ProjectService {
       if (!polygon) {
         throw new NotFoundException('Polygon not found');
       }
-      await this.checkProjectAccess(polygon.project_id, userId!, ['admin', 'editor']);
+      await this.checkProjectAccess(
+        (polygon as any)[DB.POLYGON.PROJECT_ID],
+        userId!,
+        ['admin', 'editor'],
+      );
     }
 
     const plot = this.landPlotRepo.create({
-      cadastral_number: dto.cadastral_number || null,
+      [DB.LAND_PLOT.CADASTRAL_NUMBER]: dto.cadastral_number || null,
       area: dto.area ?? null,
-      land_category: dto.land_category || null,
-      permitted_use: dto.permitted_use || null,
+      [DB.LAND_PLOT.LAND_CATEGORY]: dto.land_category || null,
+      [DB.LAND_PLOT.PERMITTED_USE]: dto.permitted_use || null,
       address: dto.address || null,
       status: dto.status || null,
       registration_date: dto.registration_date ? new Date(dto.registration_date) : null,
-      polygon_id: dto.polygon_id || null,
+      [DB.LAND_PLOT.POLYGON_ID]: dto.polygon_id || null,
     });
     return this.landPlotRepo.save(plot);
   }
@@ -502,28 +502,22 @@ export class ProjectService {
       await this.checkProjectAccess(projectId, userId);
     }
 
-    // ← snake_case: project_id
     const members = await this.membersRepo.find({
       where: { projectId: projectId },
       relations: ['user'],
     });
 
-    // Sanitize user data - remove password
-    return members.map((member) => {
-      const { password, ...sanitizedUser } = member.user || {};
-      return {
-        ...member,
-        user: sanitizedUser || undefined,
-      };
-    });
+    return members.map((member) => sanitizeMemberUser(member as any));
   }
 
   async addMember(projectId: number, dto: AddMemberDto, currentUserId: number) {
     await this.checkProjectAccess(projectId, currentUserId, ['admin']);
 
-    // ← snake_case: project_id, user_id
     const existing = await this.membersRepo.findOne({
-      where: { projectId: projectId, userId: dto.userId },
+      where: {
+        projectId: projectId,
+        userId: dto.userId,
+      },
     });
 
     if (existing) {
@@ -533,7 +527,7 @@ export class ProjectService {
     const member = this.membersRepo.create({
       projectId: projectId,
       userId: dto.userId,
-      roleInProject: dto.role as unknown as ProjectMemberRole, // ← приведение к enum
+      roleInProject: dto.role as unknown as ProjectMemberRole,
     });
 
     return this.membersRepo.save(member);
@@ -541,9 +535,10 @@ export class ProjectService {
 
   async removeMember(projectId: number, userId: number, currentUserId: number) {
     await this.checkProjectAccess(projectId, currentUserId, ['admin']);
-
-    // ← snake_case: project_id, user_id
-    await this.membersRepo.delete({ projectId: projectId, userId: userId });
+    await this.membersRepo.delete({
+      projectId,
+      userId,
+    });
     return { message: 'Member removed successfully' };
   }
 
@@ -559,22 +554,17 @@ export class ProjectService {
       relations: ['user'],
     });
 
-    // Sanitize user data - remove password
-    return views.map((view) => {
-      const { password, ...sanitizedUser } = view.user || {};
-      return {
-        ...view,
-        user: sanitizedUser || undefined,
-      };
-    });
+    return views.map((view) => sanitizeMemberUser(view as any));
   }
 
   async saveMapView(projectId: number, dto: CreateMapViewDto, userId: number) {
     await this.checkProjectAccess(projectId, userId);
 
-    // ← snake_case: project_id, user_id
     const existing = await this.mapViewRepo.findOne({
-      where: { project_id: projectId, user_id: userId },
+      where: {
+        [DB.MAP_VIEW.PROJECT_ID]: projectId,
+        [DB.MAP_VIEW.USER_ID]: userId,
+      },
     });
 
     if (existing) {
@@ -584,8 +574,8 @@ export class ProjectService {
 
     const mapView = this.mapViewRepo.create({
       ...dto,
-      project_id: projectId,
-      user_id: userId,
+      [DB.MAP_VIEW.PROJECT_ID]: projectId,
+      [DB.MAP_VIEW.USER_ID]: userId,
     });
     return this.mapViewRepo.save(mapView);
   }
@@ -598,21 +588,22 @@ export class ProjectService {
     allowedRoles: string[] = ['admin', 'editor', 'viewer'],
   ) {
     const project = await this.projectRepo.findOne({
-      where: { id: projectId },
+      where: { [DB.PROJECT.ID]: projectId },
     });
 
     if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    // ← snake_case: owner_id
-    if (project.owner_id === userId) {
+    if ((project as any)[DB.PROJECT.OWNER_ID] === userId) {
       return true;
     }
 
-    // ← snake_case: project_id, user_id
     const membership = await this.membersRepo.findOne({
-      where: { projectId: projectId, userId: userId },
+      where: {
+        projectId,
+        userId,
+      },
     });
 
     if (
@@ -633,13 +624,14 @@ export class ProjectService {
     status: ProjectStatus,
     userId: number,
   ) {
-    const project = await this.projectRepo.findOne({ where: { id: projectId } });
+    const project = await this.projectRepo.findOne({
+      where: { [DB.PROJECT.ID]: projectId },
+    });
     if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    // Только владелец или главный инженер может менять статус
-    const isOwner = project.owner_id === userId;
+    const isOwner = (project as any)[DB.PROJECT.OWNER_ID] === userId;
     const member = await this.membersRepo.findOne({
       where: { projectId, userId },
     });
@@ -649,16 +641,8 @@ export class ProjectService {
       throw new ForbiddenException('Only owner or lead engineer can change status');
     }
 
-    // Валидация переходов статусов
-    const validTransitions: Record<ProjectStatus, ProjectStatus[]> = {
-      [ProjectStatus.DRAFT]: [ProjectStatus.IN_REVIEW, ProjectStatus.DRAFT],
-      [ProjectStatus.IN_REVIEW]: [ProjectStatus.APPROVED, ProjectStatus.RETURNED, ProjectStatus.IN_REVIEW],
-      [ProjectStatus.APPROVED]: [ProjectStatus.DRAFT, ProjectStatus.IN_REVIEW],
-      [ProjectStatus.RETURNED]: [ProjectStatus.DRAFT, ProjectStatus.IN_REVIEW],
-    };
-
-    const allowed = validTransitions[project.status];
-    if (!allowed.includes(status)) {
+    const allowed = STATUS_TRANSITIONS[project.status];
+    if (!allowed?.includes(status)) {
       throw new BadRequestException(
         `Invalid status transition from ${project.status} to ${status}`,
       );
@@ -672,7 +656,7 @@ export class ProjectService {
 
   async saveProjectCopy(projectId: number, userId: number) {
     const project = await this.projectRepo.findOne({
-      where: { id: projectId },
+      where: { [DB.PROJECT.ID]: projectId },
     });
     if (!project) {
       throw new NotFoundException('Project not found');
@@ -683,14 +667,14 @@ export class ProjectService {
       description: project.description,
       picture: project.picture,
       status: ProjectStatus.DRAFT,
-      owner_id: userId,
+      [DB.PROJECT.OWNER_ID]: userId,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
     const saved = await this.projectRepo.save(copy);
 
-    // Назначить пользователя админом копии
+    // Assign user as admin of the copy
     await this.membersRepo.save({
       projectId: saved.id,
       userId,
@@ -727,8 +711,7 @@ export class ProjectService {
     documentEntity.uploaded_by = userId;
     documentEntity.description = dto.description || null;
 
-    const saved = await Document.save(documentEntity);
-    return saved;
+    return Document.save(documentEntity);
   }
 
   async getProjectDocuments(projectId: number, userId: number) {
@@ -740,14 +723,10 @@ export class ProjectService {
       order: { uploadedAt: 'DESC' },
     });
 
-    // Sanitize uploader data - remove password
-    return documents.map((doc) => {
-      const { password, ...sanitizedUploader } = doc.uploader || {};
-      return {
-        ...doc,
-        uploader: sanitizedUploader || undefined,
-      };
-    });
+    return documents.map((doc) => ({
+      ...doc,
+      uploader: sanitizeOwner(doc.uploader),
+    }));
   }
 
   async getDocumentById(documentId: number, userId: number) {
@@ -764,11 +743,9 @@ export class ProjectService {
       await this.checkProjectAccess(doc.project_id, userId);
     }
 
-    // Sanitize uploader data - remove password
-    const { password, ...sanitizedUploader } = doc.uploader || {};
     return {
       ...doc,
-      uploader: sanitizedUploader || undefined,
+      uploader: sanitizeOwner(doc.uploader),
     };
   }
 
@@ -782,12 +759,11 @@ export class ProjectService {
       throw new NotFoundException('Document not found');
     }
 
-    if (doc.project_id) {
-      await this.checkProjectAccess(doc.project_id, userId, ['admin']);
-    } else {
+    if (!doc.project_id) {
       throw new ForbiddenException('Cannot delete document without project');
     }
 
+    await this.checkProjectAccess(doc.project_id, userId, ['admin']);
     await Document.delete(documentId);
     return { message: 'Document deleted successfully' };
   }

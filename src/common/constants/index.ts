@@ -8,8 +8,17 @@ export const MAX_PAGE_SIZE = 100;
 
 export const ACCESS_TOKEN_EXPIRY = '1h';
 export const REFRESH_TOKEN_EXPIRY_DAYS = 7;
-export const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+export const REFRESH_TOKEN_EXPIRY_MS = REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 export const COOKIE_NAME = 'refreshtoken';
+
+// ==================== Cookie Settings ====================
+
+export const COOKIE_CONFIG = {
+  HTTP_ONLY: true,
+  SECURE_PROD: true,
+  SAMESITE_PROD: 'strict' as const,
+  SAMESITE_DEV: 'lax' as const,
+} as const;
 
 // ==================== Security ====================
 
