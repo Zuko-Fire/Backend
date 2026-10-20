@@ -1,14 +1,11 @@
 // auth/auth.controller.ts
 import {
-  Body,
   Controller,
   Get,
   Post,
   Req,
   Res,
   UseGuards,
-  UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Roles } from 'src/common/decorators/auth/roles.decorator';
@@ -16,7 +13,6 @@ import { User } from 'src/common/decorators/auth/user.decorator';
 import { JwtAuthGuard } from 'src/common/guards/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/auth/roles.guard';
 import { LocalAuthGuard } from 'src/common/guards/auth/local-auth.guard';
-import { RegisterDto } from './dto/RegisterDto';
 import { LoginDto } from './dto/LoginDto';
 import { RefreshDto } from './dto/RefreshDto';
 import { UserDto } from '../users/dto/UserDto';
@@ -27,7 +23,6 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { ResponseRegisterDto } from './dto/ResponseRegisterDto';
 
 import type { Response } from 'express';
 
@@ -50,22 +45,6 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.authService.login(req.user, res);
-  }
-
-  @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiBody({ type: RegisterDto })
-  @ApiResponse({
-    status: 201,
-    description: 'User created and tokens returned.',
-    type: ResponseRegisterDto,
-  })
-  @ApiResponse({ status: 400, description: 'Invalid input or email taken.' })
-  register(
-    @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    return this.authService.register(dto, res);
   }
 
   @Post('refresh')

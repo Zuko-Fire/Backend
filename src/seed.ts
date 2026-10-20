@@ -573,13 +573,14 @@ async function seed() {
   console.log('\n📦 Seeding land plots...');
   for (const project of PROJECTS) {
     const center = getCenter(project.id);
-    const existing = await landPlotRepo.findOne({ where: { id: project.id } });
+    const cadastralNumber = `61:${project.id < 10 ? '0' : ''}${project.id}:0${project.id < 10 ? project.id : project.id}:${(project.id % 50) + 1}`;
+    const existing = await landPlotRepo.findOne({ where: { cadastral_number: cadastralNumber } });
     if (!existing) {
       const area = 500 + Math.random() * 5000;
       const streetIndex = (project.id - 1) % STREET_NAMES.length;
       await landPlotRepo.save({
         id: project.id,
-        cadastral_number: `61:${project.id < 10 ? '0' : ''}${project.id}:0${project.id < 10 ? project.id : project.id}:${(project.id % 50) + 1}`,
+        cadastral_number: cadastralNumber,
         area: parseFloat(area.toFixed(2)),
         land_category: LAND_CATEGORIES[project.id % LAND_CATEGORIES.length],
         permitted_use: PERMITTED_USES[project.id % PERMITTED_USES.length],
@@ -632,7 +633,7 @@ async function seed() {
       });
       console.log(`  ✅ Land plot: ${project.name}`);
     } else {
-      console.log(`  ⚠️  Land plot already exists: ${project.name}`);
+      console.log(`  ⚠️  Land plot already exists: ${cadastralNumber}`);
     }
   }
   console.log(`  ✅ ${PROJECTS.length} land plots created`);
