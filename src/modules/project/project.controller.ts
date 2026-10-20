@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,8 +34,17 @@ import {
   CreateLandPlotDto,
   AddMemberDto,
   CreateMapViewDto,
+  ProjectResponseDto,
+  PolygonResponseDto,
+  LandPlotResponseDto,
+  DocumentResponseDto,
+  MapViewResponseDto,
+  ProjectMemberResponseDto,
 } from './dto';
 import { ProjectService } from './project.service';
+import { ProjectStatus } from './entities/project.entity';
+import { DocumentType } from './entities/document.entity';
+import { Document } from './entities/document.entity';
 import { User } from 'src/common/decorators/auth/user.decorator';
 import { UserDto } from '../users/dto/UserDto';
 
@@ -57,19 +67,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Список доступных проектов',
-    schema: {
-      type: 'object',
-      properties: {
-        data: {
-          type: 'array',
-          items: { $ref: '#/components/schemas/Project' },
-        },
-        total: { type: 'number', example: 100 },
-        page: { type: 'number', example: 1 },
-        limit: { type: 'number', example: 10 },
-        totalPages: { type: 'number', example: 10 },
-      },
-    },
+    type: 'object',
   })
   @ApiResponse({ status: 401, description: 'Неавторизован' })
   async findAll(
@@ -132,7 +130,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Проект найден',
-    schema: { $ref: '#/components/schemas/Project' },
+    type: ProjectResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Проект не найден' })
   @ApiResponse({ status: 403, description: 'Нет доступа к проекту' })
@@ -151,7 +149,7 @@ export class ProjectController {
   @ApiResponse({
     status: 201,
     description: 'Проект успешно создан',
-    schema: { $ref: '#/components/schemas/Project' },
+    type: ProjectResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Некорректные данные' })
   async create(@Body() dto: CreateProjectDto, @User() user: UserDto) {
@@ -171,7 +169,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Проект обновлён',
-    schema: { $ref: '#/components/schemas/Project' },
+    type: ProjectResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Проект не найден' })
   @ApiResponse({ status: 403, description: 'Нет прав на редактирование' })
@@ -211,10 +209,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Список полигонов',
-    schema: {
-      type: 'array',
-      items: { $ref: '#/components/schemas/Polygon' },
-    },
+    type: [PolygonResponseDto],
   })
   async findPolygons(
     @Param('id', ParseIntPipe) id: number,
@@ -234,7 +229,7 @@ export class ProjectController {
   @ApiResponse({
     status: 201,
     description: 'Полигон создан',
-    schema: { $ref: '#/components/schemas/Polygon' },
+    type: PolygonResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Некорректный GeoJSON' })
   @ApiResponse({ status: 404, description: 'Проект не найден' })
@@ -262,7 +257,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Полигон найден',
-    schema: { $ref: '#/components/schemas/Polygon' },
+    type: PolygonResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Полигон не найден' })
   async findPolygon(
@@ -283,7 +278,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Полигон обновлён',
-    schema: { $ref: '#/components/schemas/Polygon' },
+    type: PolygonResponseDto,
   })
   @ApiResponse({ status: 403, description: 'Нет прав' })
   async updatePolygon(
@@ -341,10 +336,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Найденные полигоны',
-    schema: {
-      type: 'array',
-      items: { $ref: '#/components/schemas/Polygon' },
-    },
+    type: [PolygonResponseDto],
   })
   async findPolygonsNear(
     @Query() dto: GeoNearSearchDto,
@@ -368,17 +360,14 @@ export class ProjectController {
     description:
       'Использует PostGIS ST_Intersects для поиска пересекающихся полигонов',
   })
-  @ApiBody({ type: GeoSearchDto })
+  @ApiQuery({ type: GeoSearchDto })
   @ApiResponse({
     status: 200,
     description: 'Найденные полигоны',
-    schema: {
-      type: 'array',
-      items: { $ref: '#/components/schemas/Polygon' },
-    },
+    type: [PolygonResponseDto],
   })
   async findPolygonsIntersects(
-    @Body() dto: GeoSearchDto,
+    @Query() dto: GeoSearchDto,
     @User() user: UserDto,
   ) {
     return this.projectsService.findPolygonsInArea(dto, user.id);
@@ -402,15 +391,11 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Список участков',
-    schema: {
-      type: 'array',
-      items: { $ref: '#/components/schemas/LandPlot' },
-    },
+    type: [LandPlotResponseDto],
   })
-  async findLandPlots(
-    @Query('cadastral_number') cadastral?: string,
-    @User() user?: UserDto,
-  ) {
+  async findLandPlots(@Req() req: any) {
+    const cadastral = req.query.cadastral_number as string | undefined;
+    const user = req.user as UserDto;
     return this.projectsService.findLandPlots(cadastral, user?.id);
   }
 
@@ -424,7 +409,7 @@ export class ProjectController {
   @ApiResponse({
     status: 201,
     description: 'Участок создан',
-    schema: { $ref: '#/components/schemas/LandPlot' },
+    type: LandPlotResponseDto,
   })
   @ApiResponse({ status: 409, description: 'Кадастровый номер уже существует' })
   async createLandPlot(@Body() dto: CreateLandPlotDto, @User() user: UserDto) {
@@ -441,7 +426,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Участок найден',
-    schema: { $ref: '#/components/schemas/LandPlot' },
+    type: LandPlotResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Участок не найден' })
   async findLandPlot(
@@ -463,10 +448,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Список участников',
-    schema: {
-      type: 'array',
-      items: { $ref: '#/components/schemas/ProjectMember' },
-    },
+    type: [ProjectMemberResponseDto],
   })
   async findMembers(
     @Param('id', ParseIntPipe) id: number,
@@ -486,7 +468,7 @@ export class ProjectController {
   @ApiResponse({
     status: 201,
     description: 'Участник добавлен',
-    schema: { $ref: '#/components/schemas/ProjectMember' },
+    type: ProjectMemberResponseDto,
   })
   @ApiResponse({ status: 409, description: 'Пользователь уже в проекте' })
   @ApiResponse({ status: 403, description: 'Нет прав' })
@@ -530,10 +512,7 @@ export class ProjectController {
   @ApiResponse({
     status: 200,
     description: 'Список видов карты',
-    schema: {
-      type: 'array',
-      items: { $ref: '#/components/schemas/MapView' },
-    },
+    type: [MapViewResponseDto],
   })
   async findMapViews(
     @Param('id', ParseIntPipe) id: number,
@@ -553,7 +532,7 @@ export class ProjectController {
   @ApiResponse({
     status: 201,
     description: 'Вид сохранён',
-    schema: { $ref: '#/components/schemas/MapView' },
+    type: MapViewResponseDto,
   })
   async saveMapView(
     @Param('id', ParseIntPipe) id: number,
@@ -561,5 +540,144 @@ export class ProjectController {
     @User() user: UserDto,
   ) {
     return this.projectsService.saveMapView(id, dto, user.id!);
+  }
+
+  // ==================== STATUS WORKFLOW ====================
+
+  @ApiTags('Project Status')
+  @Put(':id/status')
+  @ApiOperation({
+    summary: 'Изменить статус проекта',
+    description:
+      'Управление жизненным циклом проекта: черновик → на проверке → утверждён/возвращён',
+  })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        status: { enum: ['draft', 'in_review', 'approved', 'returned'] },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Статус изменён' })
+  @ApiResponse({ status: 400, description: 'Недопустимый переход статуса' })
+  async updateStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: { status: ProjectStatus },
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.updateProjectStatus(id, dto.status, user.id!);
+  }
+
+  @ApiTags('Project Status')
+  @Post(':id/copy')
+  @ApiOperation({
+    summary: 'Сохранить копию проекта',
+    description: 'Создаёт копию проекта с новым ID и статусом черновика',
+  })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiResponse({ status: 201, description: 'Проект скопирован' })
+  async saveProjectCopy(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.saveProjectCopy(id, user.id!);
+  }
+
+  // ==================== DOCUMENTS ====================
+
+  @ApiTags('Documents')
+  @Post(':id/documents')
+  @ApiOperation({ summary: 'Загрузить документ в проект' })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        type: {
+          type: 'string',
+          enum: [
+            'assignment',
+            'right_document',
+            'extract_egrp',
+            'boundary_agreement',
+            'survey_data',
+            'photo',
+            'other',
+          ],
+        },
+        filePath: { type: 'string' },
+        fileSize: { type: 'number', nullable: true },
+        mimeType: { type: 'string', nullable: true },
+        description: { type: 'string', nullable: true },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Документ загружен',
+    type: DocumentResponseDto,
+  })
+  async uploadDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    dto: {
+      name: string;
+      type: DocumentType;
+      filePath: string;
+      fileSize?: number;
+      mimeType?: string;
+      description?: string;
+    },
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.uploadDocument(id, dto, user.id!);
+  }
+
+  @ApiTags('Documents')
+  @Get(':id/documents')
+  @ApiOperation({ summary: 'Получить документы проекта' })
+  @ApiParam({ name: 'id', type: Number, example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: 'Список документов',
+    type: [DocumentResponseDto],
+  })
+  async getProjectDocuments(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.getProjectDocuments(id, user.id!);
+  }
+
+  @ApiTags('Documents')
+  @Get('documents/:documentId')
+  @ApiOperation({ summary: 'Получить документ по ID' })
+  @ApiParam({ name: 'documentId', type: Number, example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: 'Документ найден',
+    type: DocumentResponseDto,
+  })
+  async getDocument(
+    @Param('documentId', ParseIntPipe) documentId: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.getDocumentById(documentId, user.id!);
+  }
+
+  @ApiTags('Documents')
+  @Delete('documents/:documentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Удалить документ' })
+  @ApiParam({ name: 'documentId', type: Number, example: 1 })
+  @ApiResponse({ status: 204, description: 'Документ удалён' })
+  async deleteDocument(
+    @Param('documentId', ParseIntPipe) documentId: number,
+    @User() user: UserDto,
+  ) {
+    return this.projectsService.deleteDocument(documentId, user.id!);
   }
 }

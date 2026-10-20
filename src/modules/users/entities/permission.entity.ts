@@ -6,7 +6,7 @@ export class Permission {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  @Column({ type: 'varchar' })
   name!: string;
 
   @OneToMany(() => RolePermissions, (rp) => rp.permission)

@@ -14,10 +14,10 @@ export class MapView {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  @Column({ type: 'int', name: 'project_id' })
   project_id!: number;
 
-  @Column()
+  @Column({ type: 'int', name: 'user_id' })
   user_id!: number;
 
   @Column({ type: 'float' })
@@ -26,7 +26,7 @@ export class MapView {
   @Column({ type: 'float' })
   lon!: number;
 
-  @Column()
+  @Column({ type: 'int' })
   zoom!: number;
 
   @CreateDateColumn({ name: 'created_at' })

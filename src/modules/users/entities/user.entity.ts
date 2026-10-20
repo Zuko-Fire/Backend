@@ -1,4 +1,5 @@
 import { IsEmail, MinLength } from 'class-validator';
+import { Exclude } from 'class-transformer';
 import { RefreshToken } from 'src/modules/auth/entities/refresh-token.entity';
 import {
   Entity,
@@ -22,24 +23,25 @@ import { Project } from 'src/modules/project/entities/project.entity';
 export class User {
   [x: string]: any;
   @PrimaryGeneratedColumn()
-  id: number | undefined;
-  @Column({ unique: true })
+  id!: number | undefined;
+  @Column({ unique: true, type: 'varchar' })
   @IsEmail()
   email!: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   name!: string;
-  @Column()
+  @Column({ type: 'varchar' })
   @MinLength(6)
+  @Exclude()
   password!: string;
 
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 
   @Column('simple-array', { nullable: true })
   roles: string[] | undefined;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   avatar?: string;
 
   @CreateDateColumn()
@@ -52,6 +54,7 @@ export class User {
   deletedAt?: Date;
 
   @OneToMany(() => RefreshToken, (token) => token.user)
+  @Exclude()
   refreshTokens: RefreshToken[] | undefined;
 
   @BeforeInsert()

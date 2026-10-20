@@ -17,6 +17,14 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+// Response DTOs
+export * from './project-response.dto';
+export * from './polygon-response.dto';
+export * from './land-plot-response.dto';
+export * from './document-response.dto';
+export * from './map-view-response.dto';
+export * from './project-member-response.dto';
+
 export class CreateProjectDto {
   @ApiProperty({
     description: 'Название проекта',
@@ -94,8 +102,16 @@ export class CreatePolygonDto {
   landPlotId?: number;
 }
 // update-polygon.dto.ts
+
 export class UpdatePolygonDto {
+  @ApiPropertyOptional({ description: 'Название полигона' })
+  @IsString()
+  @IsOptional()
   name?: string;
+
+  @ApiPropertyOptional({ description: 'GeoJSON координаты' })
+  @IsObject()
+  @IsOptional()
   coordinates?: GeoJSON;
 }
 
@@ -111,6 +127,7 @@ export class GeoSearchDto {
   @IsNumber()
   @Min(-90)
   @Max(90)
+  @Type(() => Number)
   minLat!: number;
 
   @ApiProperty({
@@ -122,6 +139,7 @@ export class GeoSearchDto {
   @IsNumber()
   @Min(-90)
   @Max(90)
+  @Type(() => Number)
   maxLat!: number;
 
   @ApiProperty({
@@ -133,6 +151,7 @@ export class GeoSearchDto {
   @IsNumber()
   @Min(-180)
   @Max(180)
+  @Type(() => Number)
   minLon!: number;
 
   @ApiProperty({
@@ -144,8 +163,12 @@ export class GeoSearchDto {
   @IsNumber()
   @Min(-180)
   @Max(180)
+  @Type(() => Number)
   maxLon!: number;
-  bounds!: {
+
+  @ApiPropertyOptional({ description: 'Bounding box' })
+  @IsOptional()
+  bounds?: {
     minLat: number;
     maxLat: number;
     minLon: number;

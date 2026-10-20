@@ -13,16 +13,16 @@ export class RefreshToken {
   @PrimaryGeneratedColumn()
   id: number | undefined;
 
-  @Column({ unique: true })
+  @Column({ unique: true, type: 'varchar' })
   token!: string;
 
-  @Column()
+  @Column({ name: 'userId', type: 'int' })
   userId?: number;
 
-  @Column()
+  @Column({ name: 'expiresAt', type: 'timestamp' })
   expiresAt!: Date;
 
-  @Column({ default: false })
+  @Column({ default: false, name: 'revoked', type: 'boolean' })
   revoked?: boolean;
 
   @CreateDateColumn()

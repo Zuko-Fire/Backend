@@ -48,10 +48,4 @@ export class ResponseRegisterDto {
     description: 'Access токен',
   })
   access_token!: string;
-
-  @ApiProperty({
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-    description: 'Refresh токен',
-  })
-  refresh_token!: string;
 }

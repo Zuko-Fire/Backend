@@ -13,10 +13,26 @@ import { RefreshToken } from './entities/refresh-token.entity';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { isDev } from 'src/common/utils/is-dev';
+import {
+  REFRESH_TOKEN_EXPIRY_MS,
+  COOKIE_NAME,
+  COOKIE_CONFIG,
+} from 'src/common/constants';
+
+/**
+ * SQL upsert for refresh tokens
+ */
+const REFRESH_TOKEN_UPSERT_SQL = `
+  INSERT INTO refresh_tokens (token, "userId", "expiresAt", revoked, "createdAt")
+  VALUES ($1, $2, $3, $4, NOW())
+  ON CONFLICT (token) DO UPDATE
+  SET "userId" = $2, "expiresAt" = $3, revoked = $4, "createdAt" = NOW()
+`;
 
 @Injectable()
 export class AuthService {
   private readonly COOKIE_DOMAIN: string;
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
@@ -27,6 +43,8 @@ export class AuthService {
     this.COOKIE_DOMAIN = configService.get<string>('COOKIE_DOMAIN')!;
   }
 
+  // ==================== Validation ====================
+
   async validateUser(
     username: string,
     password: string,
@@ -34,8 +52,7 @@ export class AuthService {
     try {
       const user = await this.usersService.findByUsername(username);
       if (user && (await this.usersService.validatePassword(user, password))) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password, ...result } = user;
+        const { password: _, ...result } = user;
         return result;
       }
       return null;
@@ -44,79 +61,64 @@ export class AuthService {
       return null;
     }
   }
+
+  // ==================== Login / Register ====================
+
   async login(user: UserDto, res: Response) {
-    const payload = {
-      name: user.name,
-      sub: user.id,
-      roles: user.roles,
-    };
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-    // persist refresh token in database
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-    await this.refreshTokenRepo.save({
-      token: refreshToken,
-      userId: user.id,
-      expiresAt,
-      revoked: false,
-    });
-    this.setCookies(res, refreshToken, expiresAt);
-    return {
-      access_token: accessToken,
-    };
-  }
-
-  async register(dto: RegisterDto, res: Response) {
-    if (!dto.email || !dto.password || !dto.name) {
-      throw new BadRequestException('Email, name and password are required');
-    }
-    if (!dto.password) {
-      throw new BadRequestException('Password is required');
-    }
-    if (await this.usersService.findByUsername(dto.email)) {
-      throw new BadRequestException('Email already in use');
-    }
-    const hashedPassword = await this.usersService.hashPassword(dto.password);
-    const user = await this.usersService.create({
-      ...dto,
-      password: hashedPassword,
-    });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...result } = user;
-    const tokenPayload = {
-      name: user.name,
-      sub: user.id,
-      roles: user.roles,
-    };
+    const tokenPayload = this.createTokenPayload(user);
     const accessToken = this.jwtService.sign(tokenPayload);
     const refreshToken = this.jwtService.sign(tokenPayload, {
       expiresIn: '7d',
     });
 
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await this.refreshTokenRepo.save({
-      token: refreshToken,
-      userId: user.id,
-      expiresAt,
-      revoked: false,
-    });
+    await this.saveRefreshToken(refreshToken, user.id!, res);
 
-    this.setCookies(res, refreshToken, expiresAt);
     return {
-      ...result,
       access_token: accessToken,
+      user: this.sanitizeUserResponse(user),
     };
   }
+
+  async register(dto: RegisterDto, res: Response) {
+    this.validateRegisterDto(dto);
+
+    if (await this.usersService.findByUsername(dto.email!)) {
+      throw new BadRequestException('Email already in use');
+    }
+
+    const hashedPassword = await this.usersService.hashPassword(dto.password);
+    const user = await this.usersService.create({
+      ...dto,
+      password: hashedPassword,
+    });
+
+    const tokenPayload = this.createTokenPayload(user);
+    const accessToken = this.jwtService.sign(tokenPayload);
+    const refreshToken = this.jwtService.sign(tokenPayload, {
+      expiresIn: '7d',
+    });
+
+    await this.saveRefreshToken(refreshToken, user.id!, res);
+
+    return {
+      access_token: accessToken,
+      user: this.sanitizeUserResponse(user),
+    };
+  }
+
+  // ==================== Refresh Token ====================
+
   async refreshToken(res: Response, req: Request) {
     try {
-      const { refresh_token: token } = this.getCookies(req);
-      const decoded: unknown = this.jwtService.verify(token ?? '') ?? null;
-      if (!decoded || typeof decoded !== 'object' || !('sub' in decoded)) {
-        throw new UnauthorizedException('Invalid refresh token');
+      const { refresh_token: token } = this.parseCookies(req);
+      if (!token) {
+        throw new UnauthorizedException('Refresh token not found');
       }
 
-      // check token in database
+      const decoded = this.verifyToken(token);
+      const userId = decoded.sub as number;
+
+      // Check token in database
       const stored = await this.refreshTokenRepo.findOne({
         where: { token, revoked: false },
       });
@@ -127,54 +129,130 @@ export class AuthService {
         throw new UnauthorizedException('Refresh token expired');
       }
 
-      const user = await this.usersService.findById(decoded.sub as number);
+      const user = await this.usersService.findById(userId);
       if (!user) {
         throw new UnauthorizedException('User not found');
       }
 
-      // optionally revoke old token (prevent reuse)
+      // Revoke old token to prevent reuse
       stored.revoked = true;
       await this.refreshTokenRepo.save(stored);
 
-      const payload = {
-        username: user.name,
-        sub: user.id,
-        roles: user.roles,
-      };
-      const access_token = this.jwtService.sign(payload);
-      const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      await this.refreshTokenRepo.save({
-        token: refresh_token,
-        userId: user.id,
-        expiresAt,
-        revoked: false,
+      // Issue new tokens
+      const tokenPayload = this.createTokenPayload(user);
+      const access_token = this.jwtService.sign(tokenPayload);
+      const refresh_token = this.jwtService.sign(tokenPayload, {
+        expiresIn: '7d',
       });
 
-      this.setCookies(res, refresh_token, expiresAt);
+      await this.saveRefreshToken(refresh_token, user.id!, res);
       return { access_token };
     } catch (e) {
       console.error('Error refreshing token', e);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
-  private setCookies(res: Response, value: string, expire: Date) {
-    res.cookie('refrashtoken', value, {
-      httpOnly: true,
-      secure: isDev(this.configService),
-      sameSite: isDev(this.configService) ? 'none' : 'lax',
+
+  // ==================== Private Helpers ====================
+
+  /**
+   * Creates JWT payload from user object
+   */
+  private createTokenPayload(user: UserDto) {
+    return {
+      name: user.name,
+      sub: user.id,
+      roles: user.roles,
+    };
+  }
+
+  /**
+   * Sanitizes user data for API response
+   */
+  private sanitizeUserResponse(user: UserDto) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      roles: user.roles,
+      isActive: user.isActive,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  /**
+   * Saves refresh token to DB and sets cookie
+   */
+  private async saveRefreshToken(
+    token: string,
+    userId: number,
+    res: Response,
+  ) {
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
+
+    await this.refreshTokenRepo.query(REFRESH_TOKEN_UPSERT_SQL, [
+      token,
+      userId,
+      expiresAt,
+      false,
+    ]);
+
+    this.setCookie(res, token, expiresAt);
+  }
+
+  /**
+   * Verifies JWT token and throws if invalid
+   */
+  private verifyToken(token: string) {
+    try {
+      return this.jwtService.verify(token);
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  /**
+   * Validates register DTO fields
+   */
+  private validateRegisterDto(dto: RegisterDto) {
+    if (!dto.email || !dto.password || !dto.name) {
+      throw new BadRequestException('Email, name and password are required');
+    }
+  }
+
+  /**
+   * Sets refresh token cookie with proper security settings
+   */
+  private setCookie(res: Response, value: string, expire: Date) {
+    const isProduction = !isDev(this.configService);
+
+    res.cookie(COOKIE_NAME, value, {
+      httpOnly: COOKIE_CONFIG.HTTP_ONLY,
+      secure: isProduction ? COOKIE_CONFIG.SECURE_PROD : false,
+      sameSite: isProduction
+        ? COOKIE_CONFIG.SAMESITE_PROD
+        : COOKIE_CONFIG.SAMESITE_DEV,
       expires: expire,
       domain: this.COOKIE_DOMAIN,
     });
   }
-  private getCookies(req: Request) {
-    const cookies = (req.headers.get('Cookie') || '').split(';');
-    if (cookies.length === 0) return {};
-    const refreshTokenCookie = cookies.find((c) =>
-      c.startsWith('refrashtoken='),
+
+  /**
+   * Parses cookies from request
+   */
+  private parseCookies(req: Request) {
+    const headers = req.headers as unknown as Record<string, string | undefined>;
+    const cookieHeader = headers.cookie || '';
+    if (!cookieHeader) return {};
+
+    const cookies = cookieHeader.split(';');
+    const refreshTokenCookie = cookies.find((c: string) =>
+      c.trim().startsWith(`${COOKIE_NAME}=`),
     );
     if (!refreshTokenCookie) return {};
+
     const [, value] = refreshTokenCookie.split('=');
     return { refresh_token: value };
   }

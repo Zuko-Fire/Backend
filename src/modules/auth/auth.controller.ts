@@ -7,6 +7,8 @@ import {
   Req,
   Res,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Roles } from 'src/common/decorators/auth/roles.decorator';
@@ -44,13 +46,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
   login(
-    @Body() _dto: LoginDto,
-    @User() user: UserDto,
+    @Req() req: Request & { user: UserDto },
     @Res({ passthrough: true }) res: Response,
   ) {
-    // request should have { email, password }
-
-    return this.authService.login(user, res);
+    return this.authService.login(req.user, res);
   }
 
   @Post('register')
@@ -72,7 +71,10 @@ export class AuthController {
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using a refresh token' })
   @ApiBody({ type: RefreshDto })
-  @ApiResponse({ status: 201, description: 'New access and refresh tokens.' })
+  @ApiResponse({
+    status: 201,
+    description: 'New access token returned. Refresh token set in httpOnly cookie.',
+  })
   @ApiResponse({
     status: 401,
     description: 'Invalid or expired refresh token.',

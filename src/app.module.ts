@@ -5,6 +5,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProjectModule } from './modules/project/project.module';
+import { ReferenceDataModule } from './modules/reference-data/reference-data.module';
+import { AiModule } from './modules/ai/ai.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -72,6 +74,8 @@ import { AppService } from './app.service';
     AuthModule,
     UsersModule,
     ProjectModule,
+    ReferenceDataModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

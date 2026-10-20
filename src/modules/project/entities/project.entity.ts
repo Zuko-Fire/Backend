@@ -13,31 +13,46 @@ import {
 import { Polygon } from './polygon.entity';
 import { MapView } from './map-view.entity';
 import { ProjectMembers } from './project-members.entity';
+import { Document } from './document.entity';
+
+export enum ProjectStatus {
+  DRAFT = 'draft', // Черновик
+  IN_REVIEW = 'in_review', // На проверке
+  APPROVED = 'approved', // Утвержден
+  RETURNED = 'returned', // Возвращен на доработку
+}
 
 @Entity('projects')
 export class Project {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  @Column({ type: 'varchar' })
   name!: string;
 
-  @Column({ type: 'text' })
-  description!: string;
+  @Column({ type: 'text', nullable: true })
+  description!: string | null;
 
-  @Column({ nullable: true })
-  picture!: string;
+  @Column({ type: 'varchar', nullable: true })
+  picture!: string | null;
 
-  @Column()
+  @Column({
+    type: 'enum',
+    enum: ProjectStatus,
+    default: ProjectStatus.DRAFT,
+  })
+  status!: ProjectStatus;
+
+  @Column({ type: 'int', name: 'owner_id' })
   owner_id!: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt!: Date;
 
-  @DeleteDateColumn()
+  @DeleteDateColumn({ name: 'deleted_at' })
   deletedAt?: Date;
 
   @ManyToOne(() => User, (user) => user.ownedProjects)
@@ -52,4 +67,7 @@ export class Project {
 
   @OneToMany(() => ProjectMembers, (pm) => pm.project)
   members!: ProjectMembers[];
+
+  @OneToMany(() => Document, (doc) => doc.project)
+  documents!: Document[];
 }
