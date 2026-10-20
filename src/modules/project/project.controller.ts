@@ -555,7 +555,9 @@ export class ProjectController {
   @ApiBody({
     schema: {
       type: 'object',
-      properties: { status: { enum: ['draft', 'in_review', 'approved', 'returned'] } },
+      properties: {
+        status: { enum: ['draft', 'in_review', 'approved', 'returned'] },
+      },
     },
   })
   @ApiResponse({ status: 200, description: 'Статус изменён' })
@@ -594,7 +596,18 @@ export class ProjectController {
       type: 'object',
       properties: {
         name: { type: 'string' },
-        type: { type: 'string', enum: ['assignment', 'right_document', 'extract_egrp', 'boundary_agreement', 'survey_data', 'photo', 'other'] },
+        type: {
+          type: 'string',
+          enum: [
+            'assignment',
+            'right_document',
+            'extract_egrp',
+            'boundary_agreement',
+            'survey_data',
+            'photo',
+            'other',
+          ],
+        },
         filePath: { type: 'string' },
         fileSize: { type: 'number', nullable: true },
         mimeType: { type: 'string', nullable: true },
@@ -602,10 +615,15 @@ export class ProjectController {
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Документ загружен', type: DocumentResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Документ загружен',
+    type: DocumentResponseDto,
+  })
   async uploadDocument(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: {
+    @Body()
+    dto: {
       name: string;
       type: DocumentType;
       filePath: string;
@@ -622,7 +640,11 @@ export class ProjectController {
   @Get(':id/documents')
   @ApiOperation({ summary: 'Получить документы проекта' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
-  @ApiResponse({ status: 200, description: 'Список документов', type: [DocumentResponseDto] })
+  @ApiResponse({
+    status: 200,
+    description: 'Список документов',
+    type: [DocumentResponseDto],
+  })
   async getProjectDocuments(
     @Param('id', ParseIntPipe) id: number,
     @User() user: UserDto,
@@ -634,7 +656,11 @@ export class ProjectController {
   @Get('documents/:documentId')
   @ApiOperation({ summary: 'Получить документ по ID' })
   @ApiParam({ name: 'documentId', type: Number, example: 1 })
-  @ApiResponse({ status: 200, description: 'Документ найден', type: DocumentResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Документ найден',
+    type: DocumentResponseDto,
+  })
   async getDocument(
     @Param('documentId', ParseIntPipe) documentId: number,
     @User() user: UserDto,
