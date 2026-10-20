@@ -53,14 +53,15 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-    // persist refresh token in database
+    // persist refresh token in database (upsert to avoid duplicate key errors)
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-    await this.refreshTokenRepo.save({
-      token: refreshToken,
-      userId: user.id,
-      expiresAt,
-      revoked: false,
-    });
+    await this.refreshTokenRepo.query(
+      `INSERT INTO refresh_tokens (token, "userId", "expiresAt", revoked, "createdAt")
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (token) DO UPDATE
+       SET "userId" = $2, "expiresAt" = $3, revoked = $4, "createdAt" = NOW()`,
+      [refreshToken, user.id, expiresAt, false],
+    );
     this.setCookies(res, refreshToken, expiresAt);
     return {
       access_token: accessToken,
@@ -105,12 +106,13 @@ export class AuthService {
     });
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await this.refreshTokenRepo.save({
-      token: refreshToken,
-      userId: user.id,
-      expiresAt,
-      revoked: false,
-    });
+    await this.refreshTokenRepo.query(
+      `INSERT INTO refresh_tokens (token, "userId", "expiresAt", revoked, "createdAt")
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (token) DO UPDATE
+       SET "userId" = $2, "expiresAt" = $3, revoked = $4, "createdAt" = NOW()`,
+      [refreshToken, user.id, expiresAt, false],
+    );
 
     this.setCookies(res, refreshToken, expiresAt);
     return {
@@ -172,12 +174,13 @@ export class AuthService {
       const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
 
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      await this.refreshTokenRepo.save({
-        token: refresh_token,
-        userId: user.id,
-        expiresAt,
-        revoked: false,
-      });
+      await this.refreshTokenRepo.query(
+        `INSERT INTO refresh_tokens (token, "userId", "expiresAt", revoked, "createdAt")
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (token) DO UPDATE
+         SET "userId" = $2, "expiresAt" = $3, revoked = $4, "createdAt" = NOW()`,
+        [refresh_token, user.id, expiresAt, false],
+      );
 
       this.setCookies(res, refresh_token, expiresAt);
       return { access_token };

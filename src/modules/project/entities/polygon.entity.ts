@@ -44,7 +44,7 @@ export class Polygon {
   @typeorm.AfterLoad()
   private loadGeometry(): void {
     if (this.coordinates && !this.geometry) {
-      this.geometry = JSON.stringify(this.coordinates);
+      this.geometry = typeof this.coordinates === 'string' ? this.coordinates : JSON.stringify(this.coordinates);
     }
     // Parse coordinates string back to object if needed
     if (typeof this.coordinates === 'string') {
@@ -59,8 +59,19 @@ export class Polygon {
   @typeorm.BeforeInsert()
   @typeorm.BeforeUpdate()
   private syncGeometry(): void {
-    if (this.coordinates && typeof this.coordinates === 'object') {
-      this.geometry = JSON.stringify(this.coordinates);
+    let coordsObj: any = this.coordinates;
+    if (typeof this.coordinates === 'string') {
+      try {
+        coordsObj = JSON.parse(this.coordinates);
+      } catch {
+        return;
+      }
+    }
+    if (coordsObj && coordsObj.type === 'Polygon' && coordsObj.coordinates) {
+      // Convert GeoJSON Polygon to WKT for PostGIS
+      const coords = coordsObj.coordinates[0] as number[][];
+      const wktPoints = coords.map((p: number[]) => `${p[0]} ${p[1]}`).join(', ');
+      this.geometry = `POLYGON((${wktPoints}))`;
     }
   }
 }

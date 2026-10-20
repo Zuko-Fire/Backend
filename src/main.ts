@@ -2,12 +2,15 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { ValidationPipe, ClassSerializerInterceptor } from '@nestjs/common';
+import { ClassSerializerInterceptor } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import { BodyValidationPipe } from './common/pipes/body-validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Swagger
   const config = new DocumentBuilder()
     .setTitle('SA server API')
     .setDescription('SA API')
@@ -29,24 +32,22 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
+
+  // Global filters and interceptors
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     new ClassSerializerInterceptor(app.get(Reflector)),
   );
+
+  // Cookie parser
   app.use(cookieParser());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    }),
-  );
+
+  // Only validate body DTOs, skip query/param/user validation
+  app.useGlobalPipes(new BodyValidationPipe());
+
   const port = process.env.PORT || 4000;
   await app.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Server is running on http://0.0.0.0:${port}`);
+    console.log(`Server is running on http://0.0.0.0:${port}`);
   });
 }
 bootstrap();

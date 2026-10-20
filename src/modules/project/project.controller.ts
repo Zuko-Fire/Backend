@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -392,10 +393,9 @@ export class ProjectController {
     description: 'Список участков',
     type: [LandPlotResponseDto],
   })
-  async findLandPlots(
-    @Query('cadastral_number') cadastral?: string,
-    @User() user?: UserDto,
-  ) {
+  async findLandPlots(@Req() req: Request) {
+    const cadastral = req.query.cadastral_number as string | undefined;
+    const user = req.user as UserDto;
     return this.projectsService.findLandPlots(cadastral, user?.id);
   }
 

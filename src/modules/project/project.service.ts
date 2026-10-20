@@ -113,7 +113,7 @@ export class ProjectService {
       .andWhere('project.deleted_at IS NULL')
       .skip((page - 1) * limit)
       .take(limit)
-      .orderBy('pm.joined_at', 'DESC');
+      .orderBy('pm.joinedAt', 'DESC');
 
     const [memberships, total] = await queryBuilder.getManyAndCount();
 
@@ -280,14 +280,26 @@ export class ProjectService {
   ) {
     await this.checkProjectAccess(projectId, userId, ['admin', 'editor']);
 
-    const polygon = this.polygonRepo.create({
-      ...dto,
-      coordinates: JSON.stringify(dto.coordinates), // ← convert to string for jsonb
-      project_id: projectId, // ← snake_case
-      created_by: userId,
-      updated_by: userId,
+    // Store coordinates as string to bypass TypeORM GeoJSON validation
+    const coordsAny = dto.coordinates as any;
+    const coordinatesStr = JSON.stringify({
+      type: coordsAny.type,
+      coordinates: coordsAny.coordinates,
     });
-    return this.polygonRepo.save(polygon);
+
+    // Generate WKT geometry from GeoJSON
+    const coords = coordsAny.coordinates[0] as number[][];
+    const wktPoints = coords.map((p: number[]) => `${p[0]} ${p[1]}`).join(', ');
+    const geometryWkt = `POLYGON((${wktPoints}))`;
+
+    // Use raw SQL to bypass TypeORM GeoJSON validation
+    const result = await this.polygonRepo.query(
+      `INSERT INTO polygons (name, coordinates, project_id, created_by, updated_by, geometry, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+       RETURNING *`,
+      [dto.name, coordinatesStr, projectId, userId, userId, geometryWkt],
+    );
+    return result[0];
   }
 
   async updatePolygon(id: number, dto: UpdatePolygonDto, userId: number) {
@@ -304,13 +316,44 @@ export class ProjectService {
       'editor',
     ]);
 
-    // ← snake_case: updated_at
-    await this.polygonRepo.update(id, {
-      name: dto.name,
-      coordinates: dto.coordinates ? JSON.stringify(dto.coordinates) : undefined,
-      updated_by: userId,
-      updated_at: new Date(),
-    } as any);
+    // Build update query
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (dto.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(dto.name);
+    }
+
+    if (dto.coordinates !== undefined) {
+      const coordsAny = dto.coordinates as any;
+      const coordinatesStr = JSON.stringify({
+        type: coordsAny.type,
+        coordinates: coordsAny.coordinates,
+      });
+      updates.push(`coordinates = $${paramIndex++}`);
+      params.push(coordinatesStr);
+
+      // Generate WKT geometry from GeoJSON
+      const coords = coordsAny.coordinates[0] as number[][];
+      const wktPoints = coords.map((p: number[]) => `${p[0]} ${p[1]}`).join(', ');
+      const geometryWkt = `POLYGON((${wktPoints}))`;
+      updates.push(`geometry = $${paramIndex++}`);
+      params.push(geometryWkt);
+    }
+
+    updates.push(`updated_by = $${paramIndex++}, updated_at = NOW()`);
+    params.push(userId);
+
+    params.push(id);
+    updates.push(`id = $${paramIndex}`);
+
+    await this.polygonRepo.query(
+      `UPDATE polygons SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      params,
+    );
+
     return this.findPolygon(id, userId);
   }
 
@@ -387,19 +430,16 @@ export class ProjectService {
       .createQueryBuilder('landPlot')
       .leftJoinAndSelect('landPlot.polygon', 'polygon');
 
-    const projectAccessCondition =
-      '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))';
+    // If cadastral number is provided, search by it
+    if (cadastral) {
+      queryBuilder.where('landPlot.cadastral_number = :cadastral', { cadastral });
+    }
 
-    if (cadastral && userId) {
-      queryBuilder
-        .where('landPlot.cadastral_number = :cadastral', { cadastral })
-        .andWhere(projectAccessCondition, { userId });
-    } else if (cadastral) {
-      queryBuilder.where('landPlot.cadastral_number = :cadastral', {
-        cadastral,
-      });
-    } else if (userId) {
-      queryBuilder.where(projectAccessCondition, { userId });
+    // If user is provided and no cadastral filter, apply access control
+    if (userId && !cadastral) {
+      const projectAccessCondition =
+        '(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))';
+      queryBuilder.andWhere(projectAccessCondition, { userId });
     }
 
     return queryBuilder.getMany();
@@ -420,8 +460,17 @@ export class ProjectService {
   }
 
   async createLandPlot(dto: CreateLandPlotDto, userId?: number) {
-    let polygonProjectId: number | null = null;
+    // Check for duplicate cadastral number
+    if (dto.cadastral_number) {
+      const existing = await this.landPlotRepo.findOne({
+        where: { cadastral_number: dto.cadastral_number },
+      });
+      if (existing) {
+        throw new BadRequestException('Кадастровый номер уже существует');
+      }
+    }
 
+    // If polygon_id is provided, check access to the polygon's project
     if (dto.polygon_id) {
       const polygon = await this.polygonRepo.findOne({
         where: { id: dto.polygon_id },
@@ -430,15 +479,17 @@ export class ProjectService {
       if (!polygon) {
         throw new NotFoundException('Polygon not found');
       }
-      polygonProjectId = polygon.project_id;
-      await this.checkProjectAccess(polygon.project_id, userId!, [
-        'admin',
-        'editor',
-      ]);
+      await this.checkProjectAccess(polygon.project_id, userId!, ['admin', 'editor']);
     }
 
     const plot = this.landPlotRepo.create({
-      ...dto,
+      cadastral_number: dto.cadastral_number || null,
+      area: dto.area ?? null,
+      land_category: dto.land_category || null,
+      permitted_use: dto.permitted_use || null,
+      address: dto.address || null,
+      status: dto.status || null,
+      registration_date: dto.registration_date ? new Date(dto.registration_date) : null,
       polygon_id: dto.polygon_id || null,
     });
     return this.landPlotRepo.save(plot);

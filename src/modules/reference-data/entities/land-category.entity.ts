@@ -4,9 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
-import { LandPlot } from '../../project/entities/land-plot.entity';
 
 @Entity('reference_land_categories')
 export class LandCategory {
@@ -30,7 +28,4 @@ export class LandCategory {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
-
-  @OneToMany(() => LandPlot, (lp) => lp.land_category)
-  landPlots!: LandPlot[];
 }
