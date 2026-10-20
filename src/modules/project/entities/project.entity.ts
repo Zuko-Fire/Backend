@@ -27,13 +27,13 @@ export class Project {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  @Column({ type: 'varchar' })
   name!: string;
 
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   picture!: string | null;
 
   @Column({
@@ -43,16 +43,16 @@ export class Project {
   })
   status!: ProjectStatus;
 
-  @Column()
+  @Column({ type: 'int', name: 'owner_id' })
   owner_id!: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt!: Date;
 
-  @DeleteDateColumn()
+  @DeleteDateColumn({ name: 'deleted_at' })
   deletedAt?: Date;
 
   @ManyToOne(() => User, (user) => user.ownedProjects)

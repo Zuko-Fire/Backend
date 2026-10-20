@@ -42,15 +42,27 @@ export class ProjectService {
   async findAccessibleProjects(userId: number, page = 1, limit = 10) {
     const [projects, total] = await this.projectRepo.findAndCount({
       where: [{ owner_id: userId }, { members: { userId } }],
-      // ✅ TypeORM поддерживает вложенные relations через массив
       relations: ['owner', 'members', 'members.user'],
       skip: (page - 1) * limit,
       take: limit,
       order: { updatedAt: 'DESC' },
     });
 
+    // Sanitize owner data - remove password
+    const sanitizedProjects = projects.map((project) => {
+      const { password, ...sanitizedOwner } = project.owner || {};
+      return {
+        ...project,
+        owner: sanitizedOwner || undefined,
+        members: project.members?.map((member) => {
+          const { password: memberPassword, ...sanitizedUser } = member.user || {};
+          return { ...member, user: sanitizedUser || undefined };
+        }),
+      };
+    });
+
     return {
-      data: projects,
+      data: sanitizedProjects,
       total,
       page,
       limit,
@@ -68,12 +80,21 @@ export class ProjectService {
       .andWhere('project.deleted_at IS NULL')
       .skip((page - 1) * limit)
       .take(limit)
-      .orderBy('project.created_at', 'DESC');
+      .orderBy('project.createdAt', 'DESC');
 
     const [projects, total] = await queryBuilder.getManyAndCount();
 
+    // Sanitize owner data - remove password
+    const sanitizedProjects = projects.map((project) => {
+      const { password, ...sanitizedOwner } = project.owner || {};
+      return {
+        ...project,
+        owner: sanitizedOwner || undefined,
+      };
+    });
+
     return {
-      data: projects,
+      data: sanitizedProjects,
       total,
       page,
       limit,
@@ -96,12 +117,20 @@ export class ProjectService {
 
     const [memberships, total] = await queryBuilder.getManyAndCount();
 
-    return {
-      data: memberships.map((pm) => ({
-        ...pm.project,
+    // Sanitize owner data - remove password
+    const sanitizedData = memberships.map((pm) => {
+      const project = pm.project as any;
+      const { password, ...sanitizedOwner } = project.owner || {};
+      return {
+        ...project,
+        owner: sanitizedOwner || undefined,
         memberRole: pm.roleInProject,
         joinedAt: pm.joinedAt,
-      })),
+      };
+    });
+
+    return {
+      data: sanitizedData,
       total,
       page,
       limit,
@@ -133,7 +162,39 @@ export class ProjectService {
       throw new NotFoundException('Project not found or access denied');
     }
 
-    return project;
+    // Sanitize all user data - remove passwords
+    const sanitizedProject = this.sanitizeProject(project);
+    return sanitizedProject;
+  }
+
+  // Helper method to sanitize user data
+  private sanitizeProject(project: any): any {
+    const { password: ownerPassword, ...sanitizedOwner } = project.owner || {};
+
+    return {
+      ...project,
+      owner: sanitizedOwner || undefined,
+      polygons: project.polygons?.map((polygon: any) => {
+        const sanitizedLandPlots = polygon.landPlots?.map((lp: any) => {
+          const { password: lpPassword, ...sanitizedPolygon } = lp.polygon || {};
+          return {
+            ...lp,
+            polygon: sanitizedPolygon || undefined,
+          };
+        }) || [];
+        return {
+          ...polygon,
+          landPlots: sanitizedLandPlots,
+        };
+      }),
+      members: project.members?.map((member: any) => {
+        const { password: memberPassword, ...sanitizedUser } = member.user || {};
+        return {
+          ...member,
+          user: sanitizedUser || undefined,
+        };
+      }),
+    };
   }
 
   // ==================== CRUD Проектов ====================
@@ -153,7 +214,8 @@ export class ProjectService {
       role_in_project: ProjectMemberRole.ADMIN, // ← enum из entity
     });
 
-    return this.findOne(saved.id, ownerId);
+    const projectWithOwner = await this.findOne(saved.id, ownerId);
+    return projectWithOwner;
   }
 
   async update(id: number, dto: UpdateProjectDto, userId: number) {
@@ -220,6 +282,7 @@ export class ProjectService {
 
     const polygon = this.polygonRepo.create({
       ...dto,
+      coordinates: JSON.stringify(dto.coordinates), // ← convert to string for jsonb
       project_id: projectId, // ← snake_case
       created_by: userId,
       updated_by: userId,
@@ -242,7 +305,12 @@ export class ProjectService {
     ]);
 
     // ← snake_case: updated_at
-    await this.polygonRepo.update(id, { ...dto, updatedAt: new Date() });
+    await this.polygonRepo.update(id, {
+      name: dto.name,
+      coordinates: dto.coordinates ? JSON.stringify(dto.coordinates) : undefined,
+      updated_by: userId,
+      updated_at: new Date(),
+    } as any);
     return this.findPolygon(id, userId);
   }
 
@@ -271,7 +339,7 @@ export class ProjectService {
   ) {
     const query = this.polygonRepo.createQueryBuilder('polygon').where(
       `ST_DWithin(
-          polygon.geometry,
+          polygon.geometry::geometry,
           ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
           :radius
         )`,
@@ -291,14 +359,14 @@ export class ProjectService {
   async findPolygonsInArea(dto: GeoSearchDto, userId?: number) {
     const query = this.polygonRepo.createQueryBuilder('polygon').where(
       `ST_Intersects(
-          polygon.geometry,
+          polygon.geometry::geometry,
           ST_MakeEnvelope(:minLon, :minLat, :maxLon, :maxLat, 4326)
         )`,
       {
-        minLon: dto.bounds.minLon,
-        minLat: dto.bounds.minLat,
-        maxLon: dto.bounds.maxLon,
-        maxLat: dto.bounds.maxLat,
+        minLon: dto.minLon,
+        minLat: dto.minLat,
+        maxLon: dto.maxLon,
+        maxLat: dto.maxLat,
       },
     );
 
@@ -384,9 +452,18 @@ export class ProjectService {
     }
 
     // ← snake_case: project_id
-    return this.membersRepo.find({
+    const members = await this.membersRepo.find({
       where: { projectId: projectId },
       relations: ['user'],
+    });
+
+    // Sanitize user data - remove password
+    return members.map((member) => {
+      const { password, ...sanitizedUser } = member.user || {};
+      return {
+        ...member,
+        user: sanitizedUser || undefined,
+      };
     });
   }
 
@@ -426,9 +503,18 @@ export class ProjectService {
       await this.checkProjectAccess(projectId, userId);
     }
 
-    return this.mapViewRepo.find({
+    const views = await this.mapViewRepo.find({
       where: { project_id: projectId },
       relations: ['user'],
+    });
+
+    // Sanitize user data - remove password
+    return views.map((view) => {
+      const { password, ...sanitizedUser } = view.user || {};
+      return {
+        ...view,
+        user: sanitizedUser || undefined,
+      };
     });
   }
 
@@ -597,10 +683,19 @@ export class ProjectService {
   async getProjectDocuments(projectId: number, userId: number) {
     await this.checkProjectAccess(projectId, userId);
 
-    return Document.find({
+    const documents = await Document.find({
       where: { project_id: projectId },
       relations: ['uploader'],
       order: { uploadedAt: 'DESC' },
+    });
+
+    // Sanitize uploader data - remove password
+    return documents.map((doc) => {
+      const { password, ...sanitizedUploader } = doc.uploader || {};
+      return {
+        ...doc,
+        uploader: sanitizedUploader || undefined,
+      };
     });
   }
 
@@ -618,7 +713,12 @@ export class ProjectService {
       await this.checkProjectAccess(doc.project_id, userId);
     }
 
-    return doc;
+    // Sanitize uploader data - remove password
+    const { password, ...sanitizedUploader } = doc.uploader || {};
+    return {
+      ...doc,
+      uploader: sanitizedUploader || undefined,
+    };
   }
 
   async deleteDocument(documentId: number, userId: number) {

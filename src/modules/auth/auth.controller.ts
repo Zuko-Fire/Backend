@@ -72,7 +72,10 @@ export class AuthController {
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using a refresh token' })
   @ApiBody({ type: RefreshDto })
-  @ApiResponse({ status: 201, description: 'New access and refresh tokens.' })
+  @ApiResponse({
+    status: 201,
+    description: 'New access token returned. Refresh token set in httpOnly cookie.',
+  })
   @ApiResponse({
     status: 401,
     description: 'Invalid or expired refresh token.',

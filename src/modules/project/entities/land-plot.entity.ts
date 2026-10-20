@@ -14,22 +14,22 @@ export class LandPlot {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ unique: true, nullable: true, type: 'varchar' })
   cadastral_number!: string | null;
 
   @Column({ type: 'float', nullable: true })
   area!: number | null;
 
-  @Column({ name: 'land_category', nullable: true })
+  @Column({ name: 'land_category', type: 'varchar', nullable: true })
   land_category!: string | null;
 
-  @Column({ name: 'permitted_use', nullable: true })
+  @Column({ name: 'permitted_use', type: 'varchar', nullable: true })
   permitted_use!: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   address!: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   status!: string | null;
 
   @Column({ name: 'registration_date', type: 'date', nullable: true })
@@ -37,7 +37,7 @@ export class LandPlot {
 
   // === Геодезические данные ===
 
-  @Column({ name: 'owner_name', nullable: true })
+  @Column({ name: 'owner_name', type: 'varchar', nullable: true })
   owner_name!: string | null; // Собственник / арендатор
 
   @Column({ name: 'cadastral_cost', type: 'float', nullable: true })
@@ -45,6 +45,7 @@ export class LandPlot {
 
   @Column({
     name: 'coordinate_system',
+    type: 'varchar',
     nullable: true,
     comment: 'Система координат (Общеземная, Референцная, местная)',
   })
@@ -67,6 +68,7 @@ export class LandPlot {
 
   @Column({
     name: 'measurement_method',
+    type: 'varchar',
     nullable: true,
     comment: 'Метод определения координат (ГНСС/GNSS, тахеометр, фотограмметрия)',
   })
@@ -82,6 +84,7 @@ export class LandPlot {
 
   @Column({
     name: 'boundary_marker_type',
+    type: 'varchar',
     nullable: true,
     comment: 'Тип межевого знака (временный, долговременный)',
   })
@@ -120,7 +123,7 @@ export class LandPlot {
   })
   boundary_description!: string | null;
 
-  @Column({ name: 'polygon_id', nullable: true })
+  @Column({ name: 'polygon_id', type: 'int', nullable: true })
   polygon_id!: number | null;
 
   @ManyToOne(() => Polygon, (p) => p.landPlots, { nullable: true, onDelete: 'SET NULL' })

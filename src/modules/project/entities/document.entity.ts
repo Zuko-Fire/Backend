@@ -26,7 +26,7 @@ export class Document extends BaseEntity {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column()
+  @Column({ type: 'varchar' })
   name!: string;
 
   @Column({
@@ -36,22 +36,22 @@ export class Document extends BaseEntity {
   })
   type!: DocumentType;
 
-  @Column({ name: 'file_path' })
+  @Column({ name: 'file_path', type: 'varchar' })
   filePath!: string; // Путь к файлу (S3, local path, URL)
 
   @Column({ name: 'file_size', type: 'bigint', nullable: true })
   fileSize!: number | null; // Размер файла в байтах
 
-  @Column({ name: 'mime_type', nullable: true })
+  @Column({ name: 'mime_type', type: 'varchar', nullable: true })
   mimeType!: string | null;
 
-  @Column({ name: 'project_id', nullable: true })
+  @Column({ name: 'project_id', type: 'int', nullable: true })
   project_id!: number | null;
 
-  @Column({ name: 'land_plot_id', nullable: true })
+  @Column({ name: 'land_plot_id', type: 'int', nullable: true })
   land_plot_id!: number | null;
 
-  @Column({ name: 'uploaded_by' })
+  @Column({ name: 'uploaded_by', type: 'int' })
   uploaded_by!: number;
 
   @CreateDateColumn({ name: 'uploaded_at' })

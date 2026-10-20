@@ -64,6 +64,16 @@ export class AuthService {
     this.setCookies(res, refreshToken, expiresAt);
     return {
       access_token: accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        roles: user.roles,
+        isActive: user.isActive,
+        avatar: user.avatar,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
     };
   }
 
@@ -104,8 +114,17 @@ export class AuthService {
 
     this.setCookies(res, refreshToken, expiresAt);
     return {
-      ...result,
       access_token: accessToken,
+      user: {
+        id: result.id,
+        email: result.email,
+        name: result.name,
+        roles: result.roles,
+        isActive: result.isActive,
+        avatar: result.avatar,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+      },
     };
   }
   async refreshToken(res: Response, req: Request) {
@@ -161,17 +180,18 @@ export class AuthService {
       });
 
       this.setCookies(res, refresh_token, expiresAt);
-      return { access_token, refresh_token };
+      return { access_token };
     } catch (e) {
       console.error('Error refreshing token', e);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
   private setCookies(res: Response, value: string, expire: Date) {
+    const isProduction = !isDev(this.configService);
     res.cookie('refreshtoken', value, {
       httpOnly: true,
-      secure: isDev(this.configService),
-      sameSite: isDev(this.configService) ? 'none' : 'lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
       expires: expire,
       domain: this.COOKIE_DOMAIN,
     });

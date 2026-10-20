@@ -11,7 +11,7 @@ export class BoundaryMarkerType {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ unique: true })
+  @Column({ unique: true, type: 'varchar' })
   name!: string; // Тип межевого знака (временный, долговременный)
 
   @Column({ type: 'text', nullable: true })
@@ -20,7 +20,7 @@ export class BoundaryMarkerType {
   @Column({ name: 'material_requirements', type: 'text', nullable: true })
   materialRequirements!: string | null; // Требования к материалу
 
-  @Column({ default: true })
+  @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })

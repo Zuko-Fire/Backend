@@ -11,7 +11,7 @@ export class PrecisionStandard {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ name: 'land_category' })
+  @Column({ name: 'land_category', type: 'varchar' })
   landCategory!: string; // Категория земель
 
   @Column({ name: 'max_accuracy_mt', type: 'float' })
@@ -29,7 +29,7 @@ export class PrecisionStandard {
   @Column({ type: 'text', nullable: true })
   note!: string | null; // Примечание / ссылка на норматив
 
-  @Column({ default: true })
+  @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })

@@ -70,8 +70,8 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
 
     // Make existing required fields nullable
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number DROP CONSTRAINT land_plots_cadastral_number_key`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE NULLS NOT DISTINCT`);
+    await queryRunner.query(`ALTER TABLE land_plots DROP CONSTRAINT IF EXISTS land_plots_cadastral_number_key`);
+    await queryRunner.query(`ALTER TABLE land_plots ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE NULLS NOT DISTINCT (cadastral_number)`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN area DROP NOT NULL`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN land_category DROP NOT NULL`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN permitted_use DROP NOT NULL`);
@@ -213,9 +213,9 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
     await queryRunner.query(`ALTER TABLE projects DROP COLUMN IF EXISTS status`);
 
     // Restore NOT NULL constraints
+    await queryRunner.query(`ALTER TABLE land_plots DROP CONSTRAINT IF EXISTS land_plots_cadastral_number_key`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number DROP CONSTRAINT land_plots_cadastral_number_key`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE`);
+    await queryRunner.query(`ALTER TABLE land_plots ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE (cadastral_number)`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN area SET NOT NULL`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN land_category SET NOT NULL`);
     await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN permitted_use SET NOT NULL`);

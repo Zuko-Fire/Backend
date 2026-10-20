@@ -25,20 +25,20 @@ export class AuditLog {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ name: 'user_id', nullable: true })
+  @Column({ name: 'user_id', type: 'int', nullable: true })
   userId!: number | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'user_id' })
   user!: User | null;
 
-  @Column({ name: 'action' })
+  @Column({ name: 'action', type: 'varchar' })
   action!: AuditAction;
 
-  @Column({ name: 'entity_type' })
+  @Column({ name: 'entity_type', type: 'varchar' })
   entityType!: string; // Project, Polygon, LandPlot, etc.
 
-  @Column({ name: 'entity_id', nullable: true })
+  @Column({ name: 'entity_id', type: 'int', nullable: true })
   entityId!: number | null;
 
   @Column({ type: 'text', nullable: true })
@@ -47,10 +47,10 @@ export class AuditLog {
   @Column({ type: 'jsonb', nullable: true })
   changes!: Record<string, any> | null; // Старые и новые значения
 
-  @Column({ name: 'ip_address', nullable: true })
+  @Column({ name: 'ip_address', type: 'varchar', nullable: true })
   ipAddress!: string | null;
 
-  @Column({ name: 'user_agent', nullable: true })
+  @Column({ name: 'user_agent', type: 'varchar', nullable: true })
   userAgent!: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
