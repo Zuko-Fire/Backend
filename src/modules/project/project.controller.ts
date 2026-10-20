@@ -393,7 +393,7 @@ export class ProjectController {
     description: 'Список участков',
     type: [LandPlotResponseDto],
   })
-  async findLandPlots(@Req() req: Request) {
+  async findLandPlots(@Req() req: any) {
     const cadastral = req.query.cadastral_number as string | undefined;
     const user = req.user as UserDto;
     return this.projectsService.findLandPlots(cadastral, user?.id);
