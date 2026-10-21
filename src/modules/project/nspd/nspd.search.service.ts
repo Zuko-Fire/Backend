@@ -242,12 +242,17 @@ export class NSPDSearchService {
       thematicSearchId: themeId,
     };
 
-    const response = await this.client.get<NSPDSearchResponse>(
-      '/geoportal/v2/search/geoportal',
-      params,
-    );
+    try {
+      const response = await this.client.get<NSPDSearchResponse>(
+        '/geoportal/v2/search/geoportal',
+        params,
+      );
 
-    return this.extractFeatures(response);
+      return this.extractFeatures(response);
+    } catch (error) {
+      if (error instanceof NotFoundError) return [];
+      throw error;
+    }
   }
 
   /**
@@ -416,34 +421,27 @@ export class NSPDSearchService {
       typeIntersect: 'fullObject',
     });
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
     try {
-      const response = await globalThis.fetch(url, {
-        method: 'POST',
-        headers: {
-          ...this.client['buildHeaders'](),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      const responseBody = await this.client.post<NSPDSearchResponse>(
+        '/geoportal/v1/intersects',
+        body,
+        { retryCount: 3 },
+      );
 
-      const requestId = response.headers.get('x-request-id') ?? undefined;
-      const responseBody = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        const text = await response.text();
-        if (text.includes('"code":400104')) {
+      // Check for TooBigContourError in response body
+      if (responseBody && typeof responseBody === 'object' && 'code' in responseBody) {
+        const resp = responseBody as any;
+        if (resp.code === 400104) {
           throw new TooBigContourError(area);
         }
-        throw parseHttpError(response.status, responseBody, requestId);
       }
 
       return this.extractFeatures(responseBody as NSPDSearchResponse);
-    } finally {
-      clearTimeout(timeout);
+    } catch (error) {
+      if (error instanceof Error && error.message?.includes('400104')) {
+        throw new TooBigContourError(area);
+      }
+      throw error;
     }
   }
 

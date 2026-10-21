@@ -456,7 +456,7 @@ export class NSPDService {
   constructor(private readonly configService: ConfigService) {
     this.NSPD_BASE_URL =
       configService.get<string>('NSPD_BASE_URL') ||
-      'https://nspd.gov.ru/api/aeggis/v4';
+      'https://nspd.gov.ru/api/aeggis/v3';
     this.CACHE_TTL_MS =
       Number(configService.get<number>('NSPD_CACHE_TTL_MS')) || 3600000; // 1 hour
 
@@ -561,7 +561,7 @@ export class NSPDService {
       RANDOM: String(Math.random()),
       WIDTH: String(width),
       HEIGHT: String(height),
-      CRS: 'EPSG:3857',
+      SRS: 'EPSG:3857',
       BBOX: `${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}`,
     });
   }
@@ -579,12 +579,20 @@ export class NSPDService {
     const cached = this.getCached<Buffer>(this.mapCache, cacheKey);
     if (cached) return cached;
 
+    const url = this.getMapImageUrl(layerId, bbox, width, height);
+    this.logger.debug(`Fetching map image from: ${url}`);
+
     try {
-      const url = this.getMapImageUrl(layerId, bbox, width, height);
       const response = await this.fetchWithAgent(url, 15000);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        this.logger.error(
+          `NSPD map image request failed: HTTP ${response.status}, body: ${text.substring(0, 500)}`,
+        );
+        throw new Error(
+          `HTTP ${response.status}: ${text.substring(0, 200)}`,
+        );
       }
 
       const arrayBuffer = await response.arrayBuffer();
@@ -594,7 +602,7 @@ export class NSPDService {
     } catch (error) {
       this.logger.error('Failed to fetch NSPD map image', error);
       throw new BadRequestException(
-        'Не удалось получить изображение карты НСПД',
+        `Не удалось получить изображение карты: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
@@ -679,6 +687,12 @@ export class NSPDService {
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
 
+      const browsers = [
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+      ];
+
       const options: https.RequestOptions = {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || 443,
@@ -686,6 +700,11 @@ export class NSPDService {
         method: 'GET',
         agent: this.httpsAgent,
         signal: controller.signal,
+        headers: {
+          'User-Agent': browsers[Math.floor(Math.random() * browsers.length)],
+          'Referer': 'https://nspd.gov.ru/map?thematic=PKK',
+          'Host': parsedUrl.hostname,
+        },
       };
 
       const req = https.request(options, (res) => {

@@ -4,6 +4,7 @@ import {
   Post,
   Query,
   Param,
+  Body,
   ParseIntPipe,
   Res,
   BadRequestException,
@@ -13,12 +14,25 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam, ApiResponse }
 import type { Response } from 'express';
 import type { NSPDLayerConfig } from './nspd.service';
 import { NSPDService } from './nspd.service';
+import { NSPDSearchService } from './nspd/nspd.search.service';
+import { NSPDTabService } from './nspd/nspd.tab.service';
+import { ThemeId, BoundingBox } from './nspd/nspd.types';
+
+/** DTO для поиска в контуре */
+interface SearchContourDto {
+  coordinates: number[][][][];
+  onlyIntersects?: boolean;
+}
 
 @ApiTags('NSPD')
 @ApiBearerAuth('access-token')
 @Controller('projects/nspd')
 export class NSPDController {
-  constructor(private readonly nspdService: NSPDService) {}
+  constructor(
+    private readonly nspdService: NSPDService,
+    private readonly searchService: NSPDSearchService,
+    private readonly tabService: NSPDTabService,
+  ) {}
 
   // ==================== Layers ====================
 
@@ -97,161 +111,200 @@ export class NSPDController {
     return legend;
   }
 
-  // ==================== Map Images ====================
+  // ==================== Search Endpoints ====================
 
-  @Get('map')
-  @ApiOperation({
-    summary: 'Получить изображение слоя НСПД',
-    description:
-      'Возвращает PNG изображение указанного слоя НСПД для заданной области',
-  })
-  @ApiQuery({
-    name: 'layer',
-    required: false,
-    type: Number,
-    description: 'ID слоя',
-    example: 36048,
-  })
-  @ApiQuery({
-    name: 'bbox',
-    required: false,
-    type: String,
-    description: 'Границы в lat/lon (minLon,minLat,maxLon,maxLat)',
-    example: '37.5,55.7,37.7,55.8',
-  })
-  @ApiQuery({
-    name: 'width',
-    required: false,
-    type: Number,
-    description: 'Ширина изображения',
-    example: 512,
-  })
-  @ApiQuery({
-    name: 'height',
-    required: false,
-    type: Number,
-    description: 'Высота изображения',
-    example: 512,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'PNG изображение карты',
-    content: { 'image/png': {} },
-  })
-  @ApiResponse({ status: 400, description: 'Некорректные параметры' })
-  async getMapImage(
-    @Query('layer') layerId = 36048,
-    @Query('bbox') bbox = '37.5,55.7,37.7,55.8',
-    @Query('width') width = 512,
-    @Query('height') height = 512,
-    @Res({ passthrough: true }) res: Response,
+  @Get('search')
+  @ApiOperation({ summary: 'Поиск объектов по query' })
+  @ApiQuery({ name: 'query', type: String })
+  @ApiQuery({ name: 'themeId', type: Number, required: false })
+  @ApiResponse({ status: 200, description: 'Массив найденных объектов' })
+  async search(
+    @Query('query') query: string,
+    @Query('themeId') themeId?: string,
   ) {
-    const bboxParts = bbox.split(',').map(Number);
-    if (bboxParts.length !== 4 || bboxParts.some((n) => isNaN(n))) {
-      throw new BadRequestException(
-        'Некорректный bbox. Формат: minLon,minLat,maxLon,maxLat',
-      );
+    if (!query) {
+      throw new BadRequestException('Query is required');
     }
-
-    const mercatorBbox = this.nspdService.createMercatorBbox(
-      bboxParts[1], // minLat
-      bboxParts[0], // minLon
-      bboxParts[3], // maxLat
-      bboxParts[2], // maxLon
-    );
-
-    const image = await this.nspdService.getMapImage(
-      layerId,
-      mercatorBbox,
-      width,
-      height,
-    );
-
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Content-Length', image.length.toString());
-    res.status(HttpStatus.OK).send(image);
+    const theme = themeId ? parseInt(themeId, 10) : ThemeId.REAL_ESTATE_OBJECTS;
+    return this.searchService.search(query, theme as ThemeId);
   }
 
-  /**
-   * Получить URL изображения (без скачивания)
-   */
-  @Get('map/url')
-  @ApiOperation({
-    summary: 'Получить URL изображения НСПД',
-    description:
-      'Возвращает прямую ссылку на изображение слоя НСПД (не скачивает)',
-  })
-  @ApiQuery({
-    name: 'layer',
-    required: false,
-    type: Number,
-    description: 'ID слоя',
-    example: 36048,
-  })
-  @ApiQuery({
-    name: 'bbox',
-    required: false,
-    type: String,
-    description: 'Границы в lat/lon (minLon,minLat,maxLon,maxLat)',
-    example: '37.5,55.7,37.7,55.8',
-  })
-  @ApiQuery({
-    name: 'width',
-    required: false,
-    type: Number,
-    description: 'Ширина',
-    example: 512,
-  })
-  @ApiQuery({
-    name: 'height',
-    required: false,
-    type: Number,
-    description: 'Высота',
-    example: 512,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'URL изображения',
-    example: {
-      imageUrl: 'https://nspd.gov.ru/api/aeggis/v4/36048/wms?SERVICE=WMS&...',
-      layerId: 36048,
-      bbox: [7804891, 8181287, 7820000, 8195000],
-    },
-  })
-  async getMapImageUrl(
-    @Query('layer') layerId = 36048,
-    @Query('bbox') bbox = '37.5,55.7,37.7,55.8',
-    @Query('width') width = 512,
-    @Query('height') height = 512,
+  @Get('search/layer')
+  @ApiOperation({ summary: 'Поиск в конкретном слое' })
+  @ApiQuery({ name: 'query', type: String })
+  @ApiQuery({ name: 'layerId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив найденных объектов' })
+  async searchInLayer(
+    @Query('query') query: string,
+    @Query('layerId') layerId: string,
   ) {
-    const bboxParts = bbox.split(',').map(Number);
-    if (bboxParts.length !== 4 || bboxParts.some((n) => isNaN(n))) {
-      throw new BadRequestException(
-        'Некорректный bbox. Формат: minLon,minLat,maxLon,maxLat',
-      );
+    if (!query) {
+      throw new BadRequestException('Query is required');
+    }
+    return this.searchService.searchInLayer(query, parseInt(layerId, 10));
+  }
+
+  @Get('search/at-point')
+  @ApiOperation({
+    summary: 'Поиск объектов по координатам (WMS GetFeatureInfo)',
+  })
+  @ApiQuery({ name: 'lat', type: Number })
+  @ApiQuery({ name: 'lng', type: Number })
+  @ApiQuery({ name: 'layerId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив найденных объектов' })
+  async searchAtPoint(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('layerId') layerId: string,
+  ) {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    const layerIdNum = parseInt(layerId, 10);
+
+    if (isNaN(latNum) || isNaN(lngNum) || isNaN(layerIdNum)) {
+      throw new BadRequestException('Invalid lat, lng, or layerId');
     }
 
-    const mercatorBbox = this.nspdService.createMercatorBbox(
-      bboxParts[1],
-      bboxParts[0],
-      bboxParts[3],
-      bboxParts[2],
-    );
+    const layerInfo = await this.nspdService.getLayerInfo(layerIdNum);
+    const layerName = layerInfo?.name ?? String(layerIdNum);
 
-    const imageUrl = this.nspdService.getMapImageUrl(
-      layerId,
-      mercatorBbox,
-      width,
-      height,
+    return this.searchService.searchAtPoint(
+      latNum,
+      lngNum,
+      layerIdNum,
+      layerName,
     );
+  }
 
-    return {
-      imageUrl,
-      layerId,
-      bbox: mercatorBbox,
-      width,
-      height,
+  @Post('search/contour')
+  @ApiOperation({ summary: 'Поиск объектов в контуре (полигоне)' })
+  @ApiQuery({
+    name: 'layerIds',
+    type: String,
+    description: 'Комma-separated layer IDs',
+  })
+  @ApiResponse({ status: 200, description: 'Массив найденных объектов' })
+  async searchInContour(
+    @Body() body: SearchContourDto,
+    @Query('layerIds') layerIds: string,
+  ) {
+    if (!body.coordinates) {
+      throw new BadRequestException('coordinates body is required');
+    }
+    if (!layerIds) {
+      throw new BadRequestException('layerIds query param is required');
+    }
+
+    const layerIdList = layerIds
+      .split(',')
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((id) => !isNaN(id));
+
+    if (layerIdList.length === 0) {
+      throw new BadRequestException('At least one valid layerId is required');
+    }
+
+    const layers = await this.nspdService.getLayers();
+    const layerNodes = layers
+      .filter((l) => layerIdList.includes(l.id))
+      .map((l) => l.layerMeta!)
+      .filter((m): m is NonNullable<typeof m> => m !== undefined);
+
+    if (layerNodes.length === 0) {
+      throw new BadRequestException('No valid layers found for given IDs');
+    }
+
+    const geometry = {
+      type: 'MultiPolygon' as const,
+      coordinates: body.coordinates,
     };
+
+    return this.searchService.searchInContourIter(
+      geometry,
+      layerNodes,
+      body.onlyIntersects,
+    );
+  }
+
+  // ==================== Tab Data Endpoints ====================
+
+  @Get('tab/land-parts/:geomId')
+  @ApiOperation({ summary: 'Получить данные вкладки "Части ЗУ"' })
+  @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив частей ЗУ' })
+  async tabLandParts(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabLandParts(parseInt(geomId, 10), parseInt(categoryId, 10));
+  }
+
+  @Get('tab/land-links/:geomId')
+  @ApiOperation({ summary: 'Получить данные вкладки "Связанные ЗУ"' })
+  @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив связанных ЗУ' })
+  async tabLandLinks(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabLandLinks(parseInt(geomId, 10), parseInt(categoryId, 10));
+  }
+
+  @Get('tab/permission-type/:geomId')
+  @ApiOperation({
+    summary: 'Получить данные вкладки "Виды разрешенного использования"',
+  })
+  @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив видов использования' })
+  async tabPermissionType(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabPermissionType(parseInt(geomId, 10), parseInt(categoryId, 10));
+  }
+
+  @Get('tab/composition-land/:geomId')
+  @ApiOperation({ summary: 'Получить данные вкладки "Состав ЕЗП"' })
+  @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив состава ЕЗП' })
+  async tabCompositionLand(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabCompositionLand(parseInt(geomId, 10), parseInt(categoryId, 10));
+  }
+
+  @Get('tab/build-parts/:geomId')
+  @ApiOperation({ summary: 'Получить данные вкладки "Части ОКС"' })
+  @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
+  @ApiResponse({ status: 200, description: 'Массив частей ОКС' })
+  async tabBuildParts(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabBuildParts(parseInt(geomId, 10), parseInt(categoryId, 10));
+  }
+
+  @Get('tab/objects')
+  @ApiOperation({
+    summary: 'Получить данные вкладки "Объекты" (без координат)',
+  })
+  @ApiQuery({ name: 'objdocId', type: Number })
+  @ApiQuery({ name: 'registersId', type: Number })
+  @ApiResponse({ status: 200, description: 'Словарь объектов по регистрам' })
+  async tabObjectsList(
+    @Query('objdocId') objdocId: string,
+    @Query('registersId') registersId: string,
+  ) {
+    return this.tabService.tabObjectsList(
+      parseInt(objdocId, 10),
+      parseInt(registersId, 10),
+    );
   }
 
   // ==================== Coordinate Conversion ====================

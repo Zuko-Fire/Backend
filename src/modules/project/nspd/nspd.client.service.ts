@@ -1,9 +1,12 @@
 // src/modules/project/nspd/nspd.client.service.ts
 // Базовый HTTP-клиент для работы с НСПД (вдохновлено pynspd)
+// Использует Node.js https модуль для обхода self-signed SSL сертификатов
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as https from 'https';
+import * as http from 'http';
+import { URL } from 'url';
 import { NSPDClientConfig, NSPD_DEFAULT_LAYERS } from './nspd.types';
 import {
   PynspdServerError,
@@ -30,7 +33,6 @@ function generateUserAgent(): string {
 
 /**
  * Создание HTTPS-агента с отключённой проверкой сертификатов
- * (НСПД использует внутренние/self-signed сертификаты Минцифры)
  */
 function createHttpsAgent(): https.Agent {
   return new https.Agent({
@@ -47,13 +49,13 @@ function sleepWithJitter(
   maxDelayMs = 30000,
 ): Promise<void> {
   const exponentialDelay = baseDelayMs * 2 ** attempt;
-  const jitter = Math.random() * 0.5 + 0.5; // 0.5x - 1.5x
+  const jitter = Math.random() * 0.5 + 0.5;
   const delay = Math.min(exponentialDelay * jitter, maxDelayMs);
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
 /**
- * Проверяет, является ли ошибка.retryable
+ * Проверяет, является ли ошибка retryable
  */
 function isRetryableError(error: unknown): boolean {
   if (error instanceof PynspdNetworkError) return true;
@@ -113,33 +115,82 @@ export function parseHttpError(
 }
 
 /**
+ * HTTP/HTTPS запрос через Node.js модуль (работает с self-signed SSL)
+ */
+function httpReq(
+  method: 'GET' | 'POST',
+  urlStr: string,
+  body?: string,
+  headers?: Record<string, string>,
+  timeoutMs?: number,
+): Promise<{ status: number; body: unknown; requestId?: string }> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(urlStr);
+    const isHttps = parsedUrl.protocol === 'https:';
+    const mod = isHttps ? https : http;
+    const agent = isHttps ? createHttpsAgent() : undefined;
+
+    const options: https.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method,
+      agent,
+      timeout: timeoutMs || 30000,
+      headers: headers || {},
+    };
+
+    const req = mod.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        const requestId = res.headers['x-request-id'] as string | undefined;
+        let responseBody: unknown;
+        try {
+          responseBody = JSON.parse(buffer.toString());
+        } catch {
+          responseBody = buffer.toString();
+        }
+
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve({ status: res.statusCode, body: responseBody, requestId });
+        } else {
+          reject({ status: res.statusCode || 500, body: responseBody, requestId });
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Request timeout after ${timeoutMs}ms`));
+    });
+
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+/**
  * Базовый HTTP-клиент для работы с НСПД.
- * Реализует retry-политику, SSL bypass, кэширование и рандомизацию User-Agent.
  */
 @Injectable()
 export class NSPDClientService {
   private readonly logger = new Logger(NSPDClientService.name);
   private readonly config: NSPDClientConfig;
-  private readonly httpsAgent = createHttpsAgent();
-  private readonly cache = new Map<
-    string,
-    { data: unknown; expiry: number }
-  >();
+  private readonly cache = new Map<string, { data: unknown; expiry: number }>();
 
   constructor(private readonly configService: ConfigService) {
     const baseUrl =
       this.configService.get<string>('NSPD_BASE_URL') ||
       'https://nspd.gov.ru/api';
-
     const retriesRaw = this.configService.get<number>('NSPD_CLIENT_RETRIES');
     const retries = retriesRaw ?? 10;
-
     const retryOnBlockedIp =
-      this.configService.get<string>('NSPD_CLIENT_RETRY_ON_BLOCKED_IP') ===
-      'true';
-
+      this.configService.get<string>('NSPD_CLIENT_RETRY_ON_BLOCKED_IP') === 'true';
     const cacheTtlMsRaw = this.configService.get<number>('NSPD_CACHE_TTL_MS');
-    const cacheTtlMs = cacheTtlMsRaw ?? 3_600_000; // 1 hour
+    const cacheTtlMs = cacheTtlMsRaw ?? 3_600_000;
 
     this.config = {
       baseUrl,
@@ -150,55 +201,41 @@ export class NSPDClientService {
     };
   }
 
-  /** Текущая конфигурация */
   getConfig(): NSPDClientConfig {
     return { ...this.config };
   }
 
-  /** Base URL для всех запросов */
   getBaseUrl(): string {
     return this.config.baseUrl;
   }
 
   // ==================== Caching ====================
 
-  /** Получить данные из кэша */
   getCache<T = unknown>(key: string): T | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
-
     if (Date.now() > entry.expiry) {
       this.cache.delete(key);
       return null;
     }
-
     return entry.data as T;
   }
 
-  /** Сохранить данные в кэш */
   setCache(key: string, data: unknown): void {
-    this.cache.set(key, {
-      data,
-      expiry: Date.now() + this.config.cacheTtlMs,
-    });
+    this.cache.set(key, { data, expiry: Date.now() + this.config.cacheTtlMs });
   }
 
-  /** Очистить весь кэш */
   clearCache(): void {
     this.cache.clear();
     this.logger.log('NSPD cache cleared');
   }
 
-  /** Размер кэша */
   getCacheSize(): number {
     return this.cache.size;
   }
 
   // ==================== HTTP Request ====================
 
-  /**
-   * Выполнить GET-запрос к НСПД с retry-политикой и кэшированием.
-   */
   async get<T = unknown>(
     path: string,
     params?: Record<string, string | number | boolean>,
@@ -206,54 +243,42 @@ export class NSPDClientService {
   ): Promise<T> {
     const cacheKey = `GET:${path}:${JSON.stringify(params)}`;
 
-    // Попытка из кэша
     if (!options?.skipCache) {
       const cached = this.getCache<T>(cacheKey);
-      if (cached) {
-        this.logger.debug(`Cache hit for ${path}`);
-        return cached;
-      }
+      if (cached) return cached;
     }
 
     const url = this.buildUrl(path, params);
     const retryCount = options?.retryCount ?? this.config.retries;
-
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
-        const result = await this.fetchWithTimeout<T>(url);
-
-        // Кэшируем успешный ответ
+        const result = await this.httpGet<T>(url);
         if (!options?.skipCache) {
           this.setCache(cacheKey, result);
         }
-
         return result;
       } catch (error) {
         lastError = error;
+        let status = 0;
+        let body: unknown;
+        if (error && typeof error === 'object' && 'status' in error) {
+          status = (error as any).status;
+          body = (error as any).body;
+        }
 
-        // Не retry-блени ошибки
         if (!isRetryableError(error)) {
-          throw error;
+          throw parseHttpError(status, body);
         }
-
-        // Если это последняя попытка — выбрасываем
-        if (attempt >= retryCount) {
-          break;
-        }
-
-        // Retry-блени ошибки
-        if (error instanceof BlockedIPError && !this.config.retryOnBlockedIp) {
-          throw error;
+        if (attempt >= retryCount) break;
+        if (status === 403 && !this.config.retryOnBlockedIp) {
+          throw parseHttpError(status, body);
         }
 
         this.logger.warn(
-          `NSPD request failed (attempt ${attempt + 1}/${
-            retryCount + 1
-          }): ${path} - ${error instanceof Error ? error.message : error}`,
+          `NSPD request failed (${attempt + 1}/${retryCount + 1}): ${path}`,
         );
-
         await sleepWithJitter(attempt);
       }
     }
@@ -264,9 +289,6 @@ export class NSPDClientService {
     );
   }
 
-  /**
-   * Выполнить POST-запрос к НСПД с retry-политикой.
-   */
   async post<T = unknown>(
     path: string,
     body: unknown,
@@ -274,34 +296,32 @@ export class NSPDClientService {
   ): Promise<T> {
     const url = this.buildUrl(path);
     const retryCount = options?.retryCount ?? this.config.retries;
-
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= retryCount; attempt++) {
       try {
-        const result = await this.postWithTimeout<T>(url, body);
+        const result = await this.httpPost<T>(url, JSON.stringify(body));
         return result;
       } catch (error) {
         lastError = error;
+        let status = 0;
+        let bodyResp: unknown;
+        if (error && typeof error === 'object' && 'status' in error) {
+          status = (error as any).status;
+          bodyResp = (error as any).body;
+        }
 
         if (!isRetryableError(error)) {
-          throw error;
+          throw parseHttpError(status, bodyResp);
         }
-
-        if (attempt >= retryCount) {
-          break;
-        }
-
-        if (error instanceof BlockedIPError && !this.config.retryOnBlockedIp) {
-          throw error;
+        if (attempt >= retryCount) break;
+        if (status === 403 && !this.config.retryOnBlockedIp) {
+          throw parseHttpError(status, bodyResp);
         }
 
         this.logger.warn(
-          `NSPD POST request failed (attempt ${attempt + 1}/${
-            retryCount + 1
-          }): ${path} - ${error instanceof Error ? error.message : error}`,
+          `NSPD POST failed (${attempt + 1}/${retryCount + 1}): ${path}`,
         );
-
         await sleepWithJitter(attempt);
       }
     }
@@ -312,12 +332,14 @@ export class NSPDClientService {
     );
   }
 
-  // ==================== Internal HTTP ====================
+  // ==================== Internal ====================
 
-  /** Построить полный URL */
   buildUrl(path: string, params?: Record<string, string | number | boolean>): string {
-    const url = new URL(path, this.config.baseUrl);
-
+    const base = this.config.baseUrl.endsWith('/')
+      ? this.config.baseUrl
+      : this.config.baseUrl + '/';
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    const url = new URL(cleanPath, base);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         if (value !== undefined && value !== null) {
@@ -325,70 +347,33 @@ export class NSPDClientService {
         }
       }
     }
-
     return url.toString();
   }
 
-  /** Выполнить fetch с таймаутом (GET) */
-  private async fetchWithTimeout<T>(url: string): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeout);
-
-    try {
-      const response = await globalThis.fetch(url, {
-        method: 'GET',
-        headers: this.buildHeaders(),
-        signal: controller.signal,
-        // @ts-expect-error - node-fetch supports agent option
-        agent: this.httpsAgent,
-      });
-
-      return await this.handleResponse<T>(response);
-    } finally {
-      clearTimeout(timeout);
-    }
+  private async httpGet<T>(url: string): Promise<T> {
+    const result = await httpReq('GET', url, undefined, this.buildHeaders(), this.config.timeout);
+    return (result as any).body as T;
   }
 
-  /** Выполнить fetch с таймаутом (POST) */
-  private async postWithTimeout<T>(
-    url: string,
-    body: unknown,
-  ): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeout);
-
-    try {
-      const response = await globalThis.fetch(url, {
-        method: 'POST',
-        headers: {
-          ...this.buildHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-        // @ts-expect-error - node-fetch supports agent option
-        agent: this.httpsAgent,
-      });
-
-      return await this.handleResponse<T>(response);
-    } finally {
-      clearTimeout(timeout);
-    }
+  private async httpPost<T>(url: string, body: string): Promise<T> {
+    const result = await httpReq('POST', url, body, {
+      ...this.buildHeaders(),
+      'Content-Type': 'application/json',
+      'Content-Length': String(Buffer.byteLength(body)),
+    }, this.config.timeout);
+    return (result as any).body as T;
   }
 
-  /** Построить заголовки запроса */
   private buildHeaders(): Record<string, string> {
     return {
       'User-Agent': generateUserAgent(),
-      Referer: 'https://nspd.gov.ru/map?thematic=PKK',
-      Host: 'nspd.gov.ru',
+      'Referer': 'https://nspd.gov.ru/map?thematic=PKK',
+      'Host': 'nspd.gov.ru',
     };
   }
 
-  /** IP адрес НСПД (для обхода DNS-блокировок прокси) */
   async resolveNsdpIp(): Promise<string | null> {
     try {
-      // Use DNS resolve via a simple TCP connection attempt
       const { createConnection } = await import('net');
       return new Promise<string | null>((resolve) => {
         const socket = createConnection(443, 'nspd.gov.ru', () => {
@@ -397,34 +382,11 @@ export class NSPDClientService {
           resolve(addr);
         });
         socket.setTimeout(5000);
-        socket.on('error', () => {
-          socket.destroy();
-          resolve(null);
-        });
-        socket.on('timeout', () => {
-          socket.destroy();
-          resolve(null);
-        });
+        socket.on('error', () => { socket.destroy(); resolve(null); });
+        socket.on('timeout', () => { socket.destroy(); resolve(null); });
       });
     } catch {
       return null;
     }
-  }
-
-  /** Обработать HTTP-ответ */
-  private async handleResponse<T>(response: Response): Promise<T> {
-    const requestId = response.headers.get('x-request-id') ?? undefined;
-    const responseBody = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      const error = parseHttpError(
-        response.status,
-        responseBody,
-        requestId,
-      );
-      throw error;
-    }
-
-    return responseBody as T;
   }
 }
