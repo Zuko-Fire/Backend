@@ -5,21 +5,18 @@ import {
   Query,
   Param,
   ParseIntPipe,
-  UseGuards,
   Res,
   BadRequestException,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { JwtAuthGuard } from 'src/common/guards/auth/jwt-auth.guard';
 import type { NSPDLayerConfig } from './nspd.service';
 import { NSPDService } from './nspd.service';
 
 @ApiTags('NSPD')
 @ApiBearerAuth('access-token')
 @Controller('projects/nspd')
-@UseGuards(JwtAuthGuard)
 export class NSPDController {
   constructor(private readonly nspdService: NSPDService) {}
 

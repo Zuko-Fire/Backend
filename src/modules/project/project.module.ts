@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ProjectController } from './project.controller';
-import { NSPDController } from './nspd/nspd.controller';
+import { NSPDController } from './nspd.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Project } from './entities/project.entity';
 import { LandPlot } from './entities/land-plot.entity';
@@ -12,7 +12,7 @@ import { ProjectService } from './project.service';
 import { NSPDClientService } from './nspd/nspd.client.service';
 import { NSPDSearchService } from './nspd/nspd.search.service';
 import { NSPDTabService } from './nspd/nspd.tab.service';
-import { NSPDService } from './nspd/nspd.service';
+import { NSPDService } from './nspd.service';
 import { User } from '../users/entities/user.entity';
 
 @Module({

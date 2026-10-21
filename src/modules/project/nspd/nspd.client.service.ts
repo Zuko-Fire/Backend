@@ -65,7 +65,7 @@ function isRetryableError(error: unknown): boolean {
 /**
  * Парсит HTTP-статус и body в соответствующую ошибку
  */
-function parseHttpError(
+export function parseHttpError(
   statusCode: number,
   responseBody: unknown,
   requestId?: string,
@@ -129,7 +129,7 @@ export class NSPDClientService {
   constructor(private readonly configService: ConfigService) {
     const baseUrl =
       this.configService.get<string>('NSPD_BASE_URL') ||
-      'https://nspd.gov.ru/api/aeggis/v4';
+      'https://nspd.gov.ru/api';
 
     const retriesRaw = this.configService.get<number>('NSPD_CLIENT_RETRIES');
     const retries = retriesRaw ?? 10;
@@ -383,6 +383,32 @@ export class NSPDClientService {
       Referer: 'https://nspd.gov.ru/map?thematic=PKK',
       Host: 'nspd.gov.ru',
     };
+  }
+
+  /** IP адрес НСПД (для обхода DNS-блокировок прокси) */
+  async resolveNsdpIp(): Promise<string | null> {
+    try {
+      // Use DNS resolve via a simple TCP connection attempt
+      const { createConnection } = await import('net');
+      return new Promise<string | null>((resolve) => {
+        const socket = createConnection(443, 'nspd.gov.ru', () => {
+          const addr = (socket.remoteAddress as string) || null;
+          socket.destroy();
+          resolve(addr);
+        });
+        socket.setTimeout(5000);
+        socket.on('error', () => {
+          socket.destroy();
+          resolve(null);
+        });
+        socket.on('timeout', () => {
+          socket.destroy();
+          resolve(null);
+        });
+      });
+    } catch {
+      return null;
+    }
   }
 
   /** Обработать HTTP-ответ */
