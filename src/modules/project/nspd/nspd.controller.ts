@@ -288,17 +288,25 @@ export class NSPDController {
   @Get('tab/land-parts/:geomId')
   @ApiOperation({ summary: 'Получить данные вкладки "Части ЗУ"' })
   @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив частей ЗУ' })
-  async tabLandParts(@Param('geomId') geomId: string) {
-    return this.tabService.tabLandParts(parseInt(geomId, 10));
+  async tabLandParts(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabLandParts(parseInt(geomId, 10), parseInt(categoryId, 10));
   }
 
   @Get('tab/land-links/:geomId')
   @ApiOperation({ summary: 'Получить данные вкладки "Связанные ЗУ"' })
   @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив связанных ЗУ' })
-  async tabLandLinks(@Param('geomId') geomId: string) {
-    return this.tabService.tabLandLinks(parseInt(geomId, 10));
+  async tabLandLinks(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabLandLinks(parseInt(geomId, 10), parseInt(categoryId, 10));
   }
 
   @Get('tab/permission-type/:geomId')
@@ -306,25 +314,37 @@ export class NSPDController {
     summary: 'Получить данные вкладки "Виды разрешенного использования"',
   })
   @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив видов использования' })
-  async tabPermissionType(@Param('geomId') geomId: string) {
-    return this.tabService.tabPermissionType(parseInt(geomId, 10));
+  async tabPermissionType(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabPermissionType(parseInt(geomId, 10), parseInt(categoryId, 10));
   }
 
   @Get('tab/composition-land/:geomId')
   @ApiOperation({ summary: 'Получить данные вкладки "Состав ЕЗП"' })
   @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив состава ЕЗП' })
-  async tabCompositionLand(@Param('geomId') geomId: string) {
-    return this.tabService.tabCompositionLand(parseInt(geomId, 10));
+  async tabCompositionLand(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabCompositionLand(parseInt(geomId, 10), parseInt(categoryId, 10));
   }
 
   @Get('tab/build-parts/:geomId')
   @ApiOperation({ summary: 'Получить данные вкладки "Части ОКС"' })
   @ApiParam({ name: 'geomId', type: Number })
+  @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив частей ОКС' })
-  async tabBuildParts(@Param('geomId') geomId: string) {
-    return this.tabService.tabBuildParts(parseInt(geomId, 10));
+  async tabBuildParts(
+    @Param('geomId') geomId: string,
+    @Query('categoryId') categoryId: string,
+  ) {
+    return this.tabService.tabBuildParts(parseInt(geomId, 10), parseInt(categoryId, 10));
   }
 
   @Get('tab/objects')

@@ -6,13 +6,11 @@ import { NSPDClientService } from './nspd.client.service';
 import {
   NspdFeature,
   NSPDSearchResponse,
-  NSPDIntersectRequest,
   NSPDIntersectCategory,
   LayerNode,
   ThemeId,
   TabTitle,
   BoundingBox,
-  Coordinates,
   GeoJSONGeometry,
 } from './nspd.types';
 import {
@@ -20,7 +18,17 @@ import {
   AmbiguousSearchError,
   TooBigContourError,
   PynspdNetworkError,
+  PynspdServerError,
+  BlockedIPError,
+  TooManyRequestsError,
+  NotFoundError,
+  UnknownResponseError,
+  PynspdNetworkError as PynspdNetworkError2,
 } from './nspd.errors';
+import { parseHttpError } from './nspd.client.service';
+
+// Re-export for controller
+export { UnknownLayerError, AmbiguousSearchError, TooBigContourError };
 
 /**
  * Размер тайла для разбиения больших контуров (в градусах, примерно 10x10 км)
@@ -178,7 +186,10 @@ function tilePolygon(
 }
 
 /**
- * Преобразование GeoJSON FeatureCollection в NSPD Intersect формат
+ * Преобразование GeoJSON FeatureCollection в NSPD Intersect формат.
+ * Формат соответствует Python pynspd:
+ * { categories: [{ id }], geom: { FeatureCollection } }
+ * typeIntersect отправляется как query param, не в body.
  */
 function toIntersectCategories(
   layerNodes: LayerNode[],
@@ -231,12 +242,17 @@ export class NSPDSearchService {
       thematicSearchId: themeId,
     };
 
-    const response = await this.client.get<NSPDSearchResponse>(
-      '/geoportal/v2/search/geoportal',
-      params,
-    );
+    try {
+      const response = await this.client.get<NSPDSearchResponse>(
+        '/geoportal/v2/search/geoportal',
+        params,
+      );
 
-    return this.extractFeatures(response);
+      return this.extractFeatures(response);
+    } catch (error) {
+      if (error instanceof NotFoundError) return [];
+      throw error;
+    }
   }
 
   /**
@@ -371,6 +387,7 @@ export class NSPDSearchService {
    * Поиск объектов в пределах полигона.
    * geometry — GeoJSON Polygon/MultiPolygon coordinates.
    * layerNodes — массив LayerNode для определения категорий.
+   * typeIntersect отправляется как query param (согласно Python pynspd).
    */
   async searchInContour(
     geometry: { type: string; coordinates: number[][][][] },
@@ -385,17 +402,47 @@ export class NSPDSearchService {
 
     const categories = toIntersectCategories(layerNodes, geometry);
 
-    const body: NSPDIntersectRequest = {
-      typeIntersect: 'fullObject',
+    const body = {
       categories,
+      geom: {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: geometry as any,
+            properties: {},
+          },
+        ],
+      },
     };
 
-    const response = await this.client.post<NSPDSearchResponse>(
-      '/geoportal/v1/intersects',
-      body,
-    );
+    // POST with typeIntersect as query param (matching Python pynspd behavior)
+    const url = this.client.buildUrl('/geoportal/v1/intersects', {
+      typeIntersect: 'fullObject',
+    });
 
-    return this.extractFeatures(response);
+    try {
+      const responseBody = await this.client.post<NSPDSearchResponse>(
+        '/geoportal/v1/intersects',
+        body,
+        { retryCount: 3 },
+      );
+
+      // Check for TooBigContourError in response body
+      if (responseBody && typeof responseBody === 'object' && 'code' in responseBody) {
+        const resp = responseBody as any;
+        if (resp.code === 400104) {
+          throw new TooBigContourError(area);
+        }
+      }
+
+      return this.extractFeatures(responseBody as NSPDSearchResponse);
+    } catch (error) {
+      if (error instanceof Error && error.message?.includes('400104')) {
+        throw new TooBigContourError(area);
+      }
+      throw error;
+    }
   }
 
   /**

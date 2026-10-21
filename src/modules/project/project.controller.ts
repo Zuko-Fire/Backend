@@ -14,6 +14,8 @@ import {
   BadRequestException,
   Req,
 } from '@nestjs/common';
+import { Roles } from 'src/common/decorators/auth/roles.decorator';
+import { RolesGuard } from 'src/common/guards/auth/roles.guard';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -56,6 +58,29 @@ export class ProjectController {
   constructor(private projectsService: ProjectService) {}
 
   // ==================== 🎯 ГЛАВНЫЙ ЭНДПОИНТ: Доступные проекты ====================
+
+  @Get('all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  @ApiOperation({
+    summary: 'Получить все проекты (только админы)',
+    description: 'Возвращает ВСЕ проекты в системе, независимо от доступа пользователя',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({
+    status: 200,
+    description: 'Список всех проектов',
+    type: 'object',
+  })
+  @ApiResponse({ status: 401, description: 'Неавторизован' })
+  @ApiResponse({ status: 403, description: 'Доступ только для админов' })
+  async findAllAdmin(
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+  ) {
+    return this.projectsService.findAllProjects(+page, +limit);
+  }
 
   @Get()
   @ApiOperation({
@@ -459,9 +484,11 @@ export class ProjectController {
 
   @ApiTags('Project Members')
   @Post(':id/members')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
   @ApiOperation({
     summary: 'Добавить участника в проект',
-    description: 'Добавляет пользователя в проект с указанной ролью',
+    description: 'Только админы могут добавлять участников в проект',
   })
   @ApiParam({ name: 'id', type: Number, example: 1 })
   @ApiBody({ type: AddMemberDto })
@@ -471,7 +498,7 @@ export class ProjectController {
     type: ProjectMemberResponseDto,
   })
   @ApiResponse({ status: 409, description: 'Пользователь уже в проекте' })
-  @ApiResponse({ status: 403, description: 'Нет прав' })
+  @ApiResponse({ status: 403, description: 'Доступ только для админов' })
   async addMember(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AddMemberDto,
@@ -482,16 +509,18 @@ export class ProjectController {
 
   @ApiTags('Project Members')
   @Delete(':id/members/:userId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Удалить участника из проекта',
-    description: 'Удаляет пользователя из участников проекта',
+    description: 'Только админы могут удалять участников из проекта',
   })
   @ApiParam({ name: 'id', type: Number, example: 1 })
   @ApiParam({ name: 'userId', type: Number, example: 5 })
   @ApiResponse({ status: 204, description: 'Участник удалён' })
   @ApiResponse({ status: 404, description: 'Участник не найден' })
-  @ApiResponse({ status: 403, description: 'Нет прав' })
+  @ApiResponse({ status: 403, description: 'Доступ только для админов' })
   async removeMember(
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) userId: number,

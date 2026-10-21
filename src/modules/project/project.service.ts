@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, IsNull } from 'typeorm';
 import { LandPlot } from './entities/land-plot.entity';
 import { MapView } from './entities/map-view.entity';
 import { Polygon } from './entities/polygon.entity';
@@ -30,6 +30,7 @@ import {
   sanitizeOwner,
   sanitizeMemberUser,
 } from 'src/common/utils/sanitize';
+import { User } from 'src/modules/users/entities/user.entity';
 import { paginate } from 'src/common/utils/pagination';
 import {
   POSTGIS_SRID,
@@ -47,8 +48,27 @@ export class ProjectService {
     @InjectRepository(MapView) private mapViewRepo: Repository<MapView>,
     @InjectRepository(ProjectMembers)
     private membersRepo: Repository<ProjectMembers>,
+    @InjectRepository(User) private userRepo: Repository<User>,
     private dataSource: DataSource,
   ) {}
+
+  // ==================== Все проекты (только для админов) ====================
+
+  async findAllProjects(page = 1, limit = 10) {
+    const [projects, total] = await this.projectRepo.findAndCount({
+      where: { deletedAt: IsNull() },
+      relations: ['owner', 'members', 'members.user'],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { updatedAt: 'DESC' },
+    });
+
+    const sanitizedProjects = projects.map((project) =>
+      this.sanitizeProjectWithMembers(project as any),
+    );
+
+    return paginate(sanitizedProjects, total, page, limit);
+  }
 
   async findAccessibleProjects(userId: number, page = 1, limit = 10) {
     const [projects, total] = await this.projectRepo.findAndCount({
@@ -511,7 +531,7 @@ export class ProjectService {
   }
 
   async addMember(projectId: number, dto: AddMemberDto, currentUserId: number) {
-    await this.checkProjectAccess(projectId, currentUserId, ['admin']);
+    await this.checkSystemAdmin(currentUserId);
 
     const existing = await this.membersRepo.findOne({
       where: {
@@ -534,7 +554,7 @@ export class ProjectService {
   }
 
   async removeMember(projectId: number, userId: number, currentUserId: number) {
-    await this.checkProjectAccess(projectId, currentUserId, ['admin']);
+    await this.checkSystemAdmin(currentUserId);
     await this.membersRepo.delete({
       projectId,
       userId,
@@ -578,6 +598,24 @@ export class ProjectService {
       [DB.MAP_VIEW.USER_ID]: userId,
     });
     return this.mapViewRepo.save(mapView);
+  }
+
+  // ==================== 🔐 Проверка системного уровня админа ====================
+
+  private async checkSystemAdmin(userId: number) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'roles'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const roles = user.roles ?? [];
+    if (!roles.includes('admin') && !roles.includes('super_admin')) {
+      throw new ForbiddenException('Only admins can perform this action');
+    }
   }
 
   // ==================== 🔐 Проверка доступа ====================
