@@ -10,7 +10,7 @@
 
 ### `GET /projects/nspd/layers`
 
-Получить список всех доступных слоёв НСПД.
+Получить список всех доступных слоёв НСПД (64 слоя).
 
 **Ответ:**
 ```json
@@ -53,91 +53,18 @@
 
 ### `GET /projects/nspd/layers/:layerId/legend`
 
-Получить SVG-легенду слоя (визуальное описание символов).
+Получить легенду слоя (metadata и стиль в формате JSON).
 
 **Параметры:**
 | Параметр | Тип | Описание |
 |----------|-----|----------|
 | layerId | number | ID слоя |
 
-**Ответ:** SVG-файл (`Content-Type: image/svg+xml`).
+**Ответ:** JSON-объект с metadata слоя.
 
 ---
 
-## 2. Карты (WMS)
-
-### `GET /projects/nspd/map/url`
-
-Получить URL WMS-запроса для загрузки карты. Не скачивает изображение — только строит URL.
-
-**Параметры:**
-| Параметр | Тип | Обязательный | Описание |
-|-----------|------|-------------|----------|
-| layerId | number | Да | ID слоя (из `/layers`) |
-| minLng | number | Да | Минимальная долгота |
-| minLat | number | Да | Минимальная широта |
-| maxLng | number | Да | Максимальная долгота |
-| maxLat | number | Да | Максимальная широта |
-| width | number | Нет | Ширина изображения (по умолч. 1024) |
-| height | number | Нет | Высота изображения (по умолч. 1024) |
-
-**Пример:**
-```bash
-curl "http://localhost:4000/projects/nspd/map/url?layerId=36048&minLng=37.6&minLat=55.7&maxLng=37.7&maxLat=55.8"
-```
-
-**Ответ:**
-```json
-{
-  "url": "https://nspd.gov.ru/api/aeggis/v3/36048/wms?REQUEST=GetMap&..."
-}
-```
-
----
-
-### `GET /projects/nspd/map`
-
-Загрузить WMS-карту как PNG-изображение.
-
-**Параметры:** те же, что и у `/map/url`.
-
-**Ответ:** PNG-файл (`Content-Type: image/png`).
-
-**Где использовать:** Отображение карты на фронтенде.
-
----
-
-## 3. Конвертация координат
-
-### `GET /projects/nspd/coords/convert`
-
-Конвертация между EPSG:4326 (широта/долгота) и EPSG:3857 (Web Mercator).
-
-**Параметры:**
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| lat | number | Широта (EPSG:4326) |
-| lng | number | Долгота (EPSG:4326) |
-
-**Пример:**
-```bash
-curl "http://localhost:4000/projects/nspd/coords/convert?lat=55.7558&lng=37.6173"
-```
-
-**Ответ:**
-```json
-{
-  "input": { "lat": 55.7558, "lng": 37.6173 },
-  "webMercator": { "x": 4189501.23, "y": 7368345.67 },
-  "backToLatLon": { "lat": 55.7558, "lng": 37.6173 }
-}
-```
-
-**Где использовать:** Для построения BBOX в формате EPSG:3857 при запросе WMS-карт.
-
----
-
-## 4. Поиск объектов
+## 2. Поиск объектов
 
 ### `GET /projects/nspd/search`
 
@@ -161,7 +88,7 @@ curl "http://localhost:4000/projects/nspd/coords/convert?lat=55.7558&lng=37.6173
 
 **Пример:**
 ```bash
-curl "http://localhost:4000/projects/nspd/search?query=77:01:0010015:1234"
+curl "http://localhost:4000/projects/nspd/search?query=54:19:112001:20894"
 ```
 
 **Ответ:**
@@ -171,14 +98,14 @@ curl "http://localhost:4000/projects/nspd/search?query=77:01:0010015:1234"
     "type": "Feature",
     "geometry": {
       "type": "Polygon",
-      "coordinates": [[[37.6, 55.7], [37.7, 55.7], [37.7, 55.8], [37.6, 55.8], [37.6, 55.7]]]
+      "coordinates": [[[9240778, 7386323], [9240779, 7386321], ...]]
     },
     "properties": {
-      "category": 36048,
-      "categoryName": "Земельные участки из ЕГРН",
-      "cad_num": "77:01:0010015:1234",
-      "area": 1000.5,
-      "addr": "г. Москва, ул. Примерная, д. 1"
+      "category": 36368,
+      "categoryName": "Земельные участки ЕГРН",
+      "cad_num": "54:19:112001:20894",
+      "area": 1234.5,
+      "addr": "г. Новосибирск, ул. Примерная"
     },
     "layerMeta": { ... }
   }
@@ -199,7 +126,7 @@ curl "http://localhost:4000/projects/nspd/search?query=77:01:0010015:1234"
 
 **Пример:**
 ```bash
-curl "http://localhost:4000/projects/nspd/search/layer?query=77:01:0010015:1234&layerId=36048"
+curl "http://localhost:4000/projects/nspd/search/layer?query=test&layerId=36048"
 ```
 
 **Ответ:** массив `NspdFeature[]` (как у `/search`).
@@ -268,17 +195,17 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
   }'
 ```
 
-**Ответ:** массив `NspdFeature[]` — все объекты внутри контура.
+**Ответ:** массив `NpdFeature[]` — все объекты внутри контура.
 
 **Где использовать:** Поиск всех земельных участков в заданном контуре (например, граница проекта).
 
 ---
 
-## 5. Данные вкладок (Tab Data)
+## 3. Данные вкладок (Tab Data)
 
 Данные вкладок объекта НСПД. Требуют `geomId` — идентификатор геометрии объекта.
 
-**Где взять `geomId`:** В ответе на поиск (`/search`, `/search/at-point`) в `properties` объекта есть поле `geomId` или `id`.
+**Где взять `geomId`:** В ответе на поиск (`/search`, `/search/at-point`) в `properties` объекта есть поле `id` или `interactionId`.
 
 ---
 
@@ -290,8 +217,14 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 | Параметр | Тип | Описание |
 |----------|-----|----------|
 | geomId | number | ID геометрии объекта (из ответа поиска) |
+| categoryId | number | ID категории слоя |
 
 **Ответ:** `string[] | null` — список кадастровых номеров частей.
+
+**Пример:**
+```bash
+curl "http://localhost:4000/projects/nspd/tab/land-parts/734211049?categoryId=36368"
+```
 
 ---
 
@@ -347,7 +280,38 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 
 ---
 
-## 6. Кэш
+## 4. Конвертация координат
+
+### `GET /projects/nspd/coords/convert`
+
+Конвертация между EPSG:4326 (широта/долгота) и EPSG:3857 (Web Mercator).
+
+**Параметры:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| lat | number | Широта (EPSG:4326) |
+| lon | number | Долгота (EPSG:4326) |
+
+**Пример:**
+```bash
+curl "http://localhost:4000/projects/nspd/coords/convert?lat=55.7558&lon=37.6173"
+```
+
+**Ответ:**
+```json
+{
+  "lat": 55.7558,
+  "lon": 37.6173,
+  "x": 4187538.68,
+  "y": -70888.981
+}
+```
+
+**Где использовать:** Для построения BBOX в формате EPSG:3857 при запросе WMS-карт.
+
+---
+
+## 5. Кэш
 
 ### `GET /projects/nspd/cache/stats`
 
@@ -356,10 +320,14 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 **Ответ:**
 ```json
 {
-  "layers": 12,
-  "legends": 5,
-  "http": 3600000,
-  "ttlMs": 3600000
+  "layers": {
+    "count": 0,
+    "ttlMs": 3600000
+  },
+  "legends": {
+    "count": 0,
+    "ttlMs": 3600000
+  }
 }
 ```
 
@@ -371,7 +339,7 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 
 **Ответ:**
 ```json
-{ "message": "NSPD cache cleared" }
+{ "message": "Кэш НСПД очищен" }
 ```
 
 ---
@@ -389,6 +357,7 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 | 855413 | Кадастровые кварталы | Polygon |
 | 875845 | Зоны с особыми условиями | Polygon |
 | 879243 | Красные линии | Polygon |
+| 875831 | Населённые пункты (полигоны) | Polygon |
 
 Полный актуальный список — через `GET /projects/nspd/layers`.
 
@@ -398,13 +367,12 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 
 ### 1. Найти участок по кадастровому номеру
 ```bash
-curl "http://localhost:4000/projects/nspd/search?query=77:01:0010015:1234"
+curl "http://localhost:4000/projects/nspd/search?query=54:19:112001:20894"
 ```
 
 ### 2. Показать все участки в границах проекта
 ```bash
-# 1. Получить границы проекта (из БД)
-# 2. Поиск в контуре
+# Поиск в контуре
 curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048" \
   -H "Content-Type: application/json" \
   -d '{"coordinates": [[[...]]]}'
@@ -415,15 +383,15 @@ curl -X POST "http://localhost:4000/projects/nspd/search/contour?layerIds=36048"
 curl "http://localhost:4000/projects/nspd/search/at-point?lat=55.7558&lng=37.6173&layerId=36048"
 ```
 
-### 4. Показать карту участка
-```bash
-curl "http://localhost:4000/projects/nspd/map?layerId=36048&minLng=37.6&minLat=55.7&maxLng=37.7&maxLat=55.8&width=800&height=600" \
-  -o map.png
-```
-
-### 5. Узнать детали участка (вкладки)
+### 4. Узнать детали участка (вкладки)
 ```bash
 # geomId берём из ответа поиска
-curl "http://localhost:4000/projects/nspd/tab/land-parts/12345"
-curl "http://localhost:4000/projects/nspd/tab/permission-type/12345"
+curl "http://localhost:4000/projects/nspd/tab/land-parts/734211049?categoryId=36368"
+curl "http://localhost:4000/projects/nspd/tab/permission-type/734211049?categoryId=36368"
 ```
+
+---
+
+## Тестирование
+
+Полный набор тестовых данных и примеров для проверки всех эндпоинтов — см. [TESTING.md](./TESTING.md).
