@@ -185,11 +185,7 @@ export class AuthService {
   /**
    * Saves refresh token to DB and sets cookie
    */
-  private async saveRefreshToken(
-    token: string,
-    userId: number,
-    res: Response,
-  ) {
+  private async saveRefreshToken(token: string, userId: number, res: Response) {
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
 
     await this.refreshTokenRepo.query(REFRESH_TOKEN_UPSERT_SQL, [
@@ -243,7 +239,10 @@ export class AuthService {
    * Parses cookies from request
    */
   private parseCookies(req: Request) {
-    const headers = req.headers as unknown as Record<string, string | undefined>;
+    const headers = req.headers as unknown as Record<
+      string,
+      string | undefined
+    >;
     const cookieHeader = headers.cookie || '';
     if (!cookieHeader) return {};
 

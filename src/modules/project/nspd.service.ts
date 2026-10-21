@@ -590,9 +590,7 @@ export class NSPDService {
         this.logger.error(
           `NSPD map image request failed: HTTP ${response.status}, body: ${text.substring(0, 500)}`,
         );
-        throw new Error(
-          `HTTP ${response.status}: ${text.substring(0, 200)}`,
-        );
+        throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
       }
 
       const arrayBuffer = await response.arrayBuffer();
@@ -702,8 +700,8 @@ export class NSPDService {
         signal: controller.signal,
         headers: {
           'User-Agent': browsers[Math.floor(Math.random() * browsers.length)],
-          'Referer': 'https://nspd.gov.ru/map?thematic=PKK',
-          'Host': parsedUrl.hostname,
+          Referer: 'https://nspd.gov.ru/map?thematic=PKK',
+          Host: parsedUrl.hostname,
         },
       };
 

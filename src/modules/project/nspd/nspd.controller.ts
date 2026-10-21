@@ -294,7 +294,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabLandParts(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabLandParts(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/land-links/:geomId')
@@ -306,7 +309,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabLandLinks(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabLandLinks(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/permission-type/:geomId')
@@ -320,7 +326,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabPermissionType(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabPermissionType(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/composition-land/:geomId')
@@ -332,7 +341,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabCompositionLand(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabCompositionLand(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/build-parts/:geomId')
@@ -344,7 +356,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabBuildParts(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabBuildParts(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/objects')

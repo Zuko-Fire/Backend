@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from 'src/common/guards/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/auth/roles.guard';
@@ -45,10 +38,7 @@ export class UsersController {
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiResponse({ status: 200, description: 'Список всех пользователей' })
   @ApiResponse({ status: 403, description: 'Доступ только для админов' })
-  async findAll(
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-  ) {
+  async findAll(@Query('page') page = 1, @Query('limit') limit = 10) {
     return this.userService.findAllUsers(+page, +limit);
   }
 
@@ -59,7 +49,10 @@ export class UsersController {
   @ApiOperation({ summary: 'Создать пользователя (только админы)' })
   @ApiBody({ type: CreateUserDto })
   @ApiResponse({ status: 201, description: 'Пользователь создан' })
-  @ApiResponse({ status: 400, description: 'Некорректные данные или email занят' })
+  @ApiResponse({
+    status: 400,
+    description: 'Некорректные данные или email занят',
+  })
   @ApiResponse({ status: 403, description: 'Доступ только для админов' })
   async createUser(@Body() dto: CreateUserDto) {
     return this.userService.createUser(dto);

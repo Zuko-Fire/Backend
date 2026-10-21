@@ -26,10 +26,7 @@ import {
   AddMemberDto,
   CreateMapViewDto,
 } from './dto';
-import {
-  sanitizeOwner,
-  sanitizeMemberUser,
-} from 'src/common/utils/sanitize';
+import { sanitizeOwner, sanitizeMemberUser } from 'src/common/utils/sanitize';
 import { User } from 'src/modules/users/entities/user.entity';
 import { paginate } from 'src/common/utils/pagination';
 import {
@@ -176,10 +173,11 @@ export class ProjectService {
       owner: sanitizeOwner(project.owner),
       polygons: project.polygons?.map((polygon: any) => ({
         ...polygon,
-        landPlots: polygon.landPlots?.map((lp: any) => ({
-          ...lp,
-          polygon: sanitizeOwner(lp.polygon),
-        })) || [],
+        landPlots:
+          polygon.landPlots?.map((lp: any) => ({
+            ...lp,
+            polygon: sanitizeOwner(lp.polygon),
+          })) || [],
       })),
       members: project.members?.map((member: any) =>
         sanitizeMemberUser(member),
@@ -213,7 +211,9 @@ export class ProjectService {
   /**
    * Serializes GeoJSON coordinates to JSON string
    */
-  private serializeCoordinates(dto: CreatePolygonDto | UpdatePolygonDto): string {
+  private serializeCoordinates(
+    dto: CreatePolygonDto | UpdatePolygonDto,
+  ): string {
     const coordsAny = dto.coordinates as any;
     return JSON.stringify({
       type: coordsAny.type,
@@ -323,10 +323,11 @@ export class ProjectService {
       throw new NotFoundException('Polygon not found');
     }
 
-    await this.checkProjectAccess((polygon as any)[DB.POLYGON.PROJECT_ID], userId, [
-      'admin',
-      'editor',
-    ]);
+    await this.checkProjectAccess(
+      (polygon as any)[DB.POLYGON.PROJECT_ID],
+      userId,
+      ['admin', 'editor'],
+    );
 
     const updates: string[] = [];
     const params: any[] = [];
@@ -344,7 +345,9 @@ export class ProjectService {
         (dto.coordinates as any).coordinates,
       );
 
-      updates.push(`coordinates = $${paramIndex}, geometry = $${paramIndex + 1}`);
+      updates.push(
+        `coordinates = $${paramIndex}, geometry = $${paramIndex + 1}`,
+      );
       params.push(coordinatesStr, geometryWkt);
       paramIndex += 2;
     }
@@ -449,8 +452,7 @@ export class ProjectService {
         { cadastral },
       );
     } else if (userId) {
-      const projectAccessCondition =
-        `(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))`;
+      const projectAccessCondition = `(polygon.project_id IN (SELECT id FROM projects WHERE owner_id = :userId) OR polygon.project_id IN (SELECT project_id FROM project_members WHERE user_id = :userId))`;
       queryBuilder.andWhere(projectAccessCondition, { userId });
     }
 
@@ -509,7 +511,9 @@ export class ProjectService {
       [DB.LAND_PLOT.PERMITTED_USE]: dto.permitted_use || null,
       address: dto.address || null,
       status: dto.status || null,
-      registration_date: dto.registration_date ? new Date(dto.registration_date) : null,
+      registration_date: dto.registration_date
+        ? new Date(dto.registration_date)
+        : null,
       [DB.LAND_PLOT.POLYGON_ID]: dto.polygon_id || null,
     });
     return this.landPlotRepo.save(plot);
@@ -676,7 +680,9 @@ export class ProjectService {
     const isLeadEngineer = member?.roleInProject === ProjectMemberRole.ADMIN;
 
     if (!isOwner && !isLeadEngineer) {
-      throw new ForbiddenException('Only owner or lead engineer can change status');
+      throw new ForbiddenException(
+        'Only owner or lead engineer can change status',
+      );
     }
 
     const allowed = STATUS_TRANSITIONS[project.status];

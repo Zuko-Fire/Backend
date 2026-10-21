@@ -7,7 +7,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/guards/auth/jwt-auth.guard';
 import { ReferenceDataService } from './reference-data.service';
 
@@ -30,7 +35,9 @@ export class ReferenceDataController {
   @Post('land-categories')
   @ApiOperation({ summary: 'Создать категорию земель' })
   @ApiResponse({ status: 201, description: 'Категория создана' })
-  async createLandCategory(@Body() data: { name: string; code?: string; description?: string }) {
+  async createLandCategory(
+    @Body() data: { name: string; code?: string; description?: string },
+  ) {
     return this.referenceService.createLandCategory(data);
   }
 
@@ -46,7 +53,14 @@ export class ReferenceDataController {
   @Post('permitted-uses')
   @ApiOperation({ summary: 'Создать вид разрешенного использования' })
   @ApiResponse({ status: 201, description: 'ВРИ создан' })
-  async createPermittedUse(@Body() data: { name: string; landCategoryId?: number; description?: string }) {
+  async createPermittedUse(
+    @Body()
+    data: {
+      name: string;
+      landCategoryId?: number;
+      description?: string;
+    },
+  ) {
     return this.referenceService.createPermittedUse(data);
   }
 
@@ -62,7 +76,14 @@ export class ReferenceDataController {
   @Post('marker-types')
   @ApiOperation({ summary: 'Создать тип межевого знака' })
   @ApiResponse({ status: 201, description: 'Тип создан' })
-  async createMarkerType(@Body() data: { name: string; description?: string; materialRequirements?: string }) {
+  async createMarkerType(
+    @Body()
+    data: {
+      name: string;
+      description?: string;
+      materialRequirements?: string;
+    },
+  ) {
     return this.referenceService.createBoundaryMarkerType(data);
   }
 
@@ -85,14 +106,17 @@ export class ReferenceDataController {
   @Post('precision-standards')
   @ApiOperation({ summary: 'Создать норматив точности' })
   @ApiResponse({ status: 201, description: 'Норматив создан' })
-  async createPrecisionStandard(@Body() data: {
-    landCategory: string;
-    maxAccuracyMt: number;
-    allowedAreaDeviation: number;
-    allowedPerimeterDeviation: number;
-    allowedPointDeviation: number;
-    note?: string;
-  }) {
+  async createPrecisionStandard(
+    @Body()
+    data: {
+      landCategory: string;
+      maxAccuracyMt: number;
+      allowedAreaDeviation: number;
+      allowedPerimeterDeviation: number;
+      allowedPointDeviation: number;
+      note?: string;
+    },
+  ) {
     return this.referenceService.createPrecisionStandard(data);
   }
 }

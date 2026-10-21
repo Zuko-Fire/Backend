@@ -397,7 +397,11 @@ function generatePolygon(
   };
 }
 
-function generateCoordinates(centerLat: number, centerLon: number, pointCount: number = 8): Array<{
+function generateCoordinates(
+  centerLat: number,
+  centerLon: number,
+  pointCount: number = 8,
+): Array<{
   point_number?: number;
   x: number;
   y: number;
@@ -574,7 +578,9 @@ async function seed() {
   for (const project of PROJECTS) {
     const center = getCenter(project.id);
     const cadastralNumber = `61:${project.id < 10 ? '0' : ''}${project.id}:0${project.id < 10 ? project.id : project.id}:${(project.id % 50) + 1}`;
-    const existing = await landPlotRepo.findOne({ where: { cadastral_number: cadastralNumber } });
+    const existing = await landPlotRepo.findOne({
+      where: { cadastral_number: cadastralNumber },
+    });
     if (!existing) {
       const area = 500 + Math.random() * 5000;
       const streetIndex = (project.id - 1) % STREET_NAMES.length;

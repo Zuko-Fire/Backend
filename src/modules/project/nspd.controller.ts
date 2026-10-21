@@ -10,7 +10,14 @@ import {
   BadRequestException,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiParam,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { NSPDLayerConfig } from './nspd.service';
 import { NSPDService } from './nspd.service';
@@ -39,7 +46,8 @@ export class NSPDController {
   @Get('layers')
   @ApiOperation({
     summary: 'Получить список слоев НСПД',
-    description: 'Возвращает все доступные слои Национальной Системы Пространственных Данных',
+    description:
+      'Возвращает все доступные слои Национальной Системы Пространственных Данных',
   })
   @ApiResponse({
     status: 200,
@@ -237,7 +245,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabLandParts(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabLandParts(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/land-links/:geomId')
@@ -249,7 +260,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabLandLinks(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabLandLinks(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/permission-type/:geomId')
@@ -263,7 +277,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabPermissionType(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabPermissionType(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/composition-land/:geomId')
@@ -275,7 +292,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabCompositionLand(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabCompositionLand(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/build-parts/:geomId')
@@ -287,7 +307,10 @@ export class NSPDController {
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabBuildParts(parseInt(geomId, 10), parseInt(categoryId, 10));
+    return this.tabService.tabBuildParts(
+      parseInt(geomId, 10),
+      parseInt(categoryId, 10),
+    );
   }
 
   @Get('tab/objects')
@@ -312,7 +335,8 @@ export class NSPDController {
   @Get('coords/convert')
   @ApiOperation({
     summary: 'Конвертация координат',
-    description: 'Конвертирует координаты между EPSG:4326 (lat/lon) и EPSG:3857 (Web Mercator)',
+    description:
+      'Конвертирует координаты между EPSG:4326 (lat/lon) и EPSG:3857 (Web Mercator)',
   })
   @ApiQuery({
     name: 'lat',

@@ -3,11 +3,21 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
 export class CreateNewTables1729324800000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // === 1. Add status column to projects ===
-    await queryRunner.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'draft'`);
-    await queryRunner.query(`ALTER TABLE projects ALTER COLUMN description TYPE TEXT`);
-    await queryRunner.query(`ALTER TABLE projects ALTER COLUMN description DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE projects ALTER COLUMN picture TYPE TEXT`);
-    await queryRunner.query(`ALTER TABLE projects ALTER COLUMN picture DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'draft'`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE projects ALTER COLUMN description TYPE TEXT`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE projects ALTER COLUMN description DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE projects ALTER COLUMN picture TYPE TEXT`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE projects ALTER COLUMN picture DROP NOT NULL`,
+    );
 
     // Add check constraint for status
     await queryRunner.query(`
@@ -45,7 +55,7 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
       new TableIndex({
         name: 'idx_project_documents_project',
         columnNames: ['project_id'],
-      })
+      }),
     );
 
     await queryRunner.createIndex(
@@ -53,31 +63,69 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
       new TableIndex({
         name: 'idx_project_documents_landplot',
         columnNames: ['land_plot_id'],
-      })
+      }),
     );
 
     // === 3. Add geodetic fields to land_plots ===
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255)`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS cadastral_cost DOUBLE PRECISION`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS coordinate_system VARCHAR(100)`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS coordinates_data JSONB`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS measurement_method VARCHAR(100)`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS accuracy_mt DOUBLE PRECISION`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS boundary_marker_type VARCHAR(100)`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS adjacent_users JSONB`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS boundary_agreement_act JSONB`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS boundary_description TEXT`);
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS cadastral_cost DOUBLE PRECISION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS coordinate_system VARCHAR(100)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS coordinates_data JSONB`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS measurement_method VARCHAR(100)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS accuracy_mt DOUBLE PRECISION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS boundary_marker_type VARCHAR(100)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS adjacent_users JSONB`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS boundary_agreement_act JSONB`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD COLUMN IF NOT EXISTS boundary_description TEXT`,
+    );
 
     // Make existing required fields nullable
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots DROP CONSTRAINT IF EXISTS land_plots_cadastral_number_key`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE NULLS NOT DISTINCT (cadastral_number)`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN area DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN land_category DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN permitted_use DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN address DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN status DROP NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN registration_date DROP NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN cadastral_number DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots DROP CONSTRAINT IF EXISTS land_plots_cadastral_number_key`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE NULLS NOT DISTINCT (cadastral_number)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN area DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN land_category DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN permitted_use DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN address DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN status DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN registration_date DROP NOT NULL`,
+    );
 
     // === 4. Create reference_land_categories table ===
     await queryRunner.query(`
@@ -159,7 +207,7 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
       new TableIndex({
         name: 'idx_audit_logs_user',
         columnNames: ['user_id'],
-      })
+      }),
     );
 
     await queryRunner.createIndex(
@@ -167,7 +215,7 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
       new TableIndex({
         name: 'idx_audit_logs_entity',
         columnNames: ['entity_type', 'entity_id'],
-      })
+      }),
     );
 
     await queryRunner.createIndex(
@@ -175,7 +223,7 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
       new TableIndex({
         name: 'idx_audit_logs_created_at',
         columnNames: ['created_at'],
-      })
+      }),
     );
 
     // === 9. Add geometry column to polygons (if not exists) ===
@@ -192,35 +240,70 @@ export class CreateNewTables1729324800000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TABLE IF EXISTS audit_logs`);
-    await queryRunner.query(`DROP TABLE IF EXISTS reference_precision_standards`);
-    await queryRunner.query(`DROP TABLE IF EXISTS reference_boundary_marker_types`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS reference_precision_standards`,
+    );
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS reference_boundary_marker_types`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS reference_permitted_uses`);
     await queryRunner.query(`DROP TABLE IF EXISTS reference_land_categories`);
     await queryRunner.query(`DROP TABLE IF EXISTS project_documents`);
 
     // Remove geodetic columns from land_plots
     const columns = [
-      'boundary_description', 'boundary_agreement_act', 'adjacent_users',
-      'boundary_marker_type', 'accuracy_mt', 'measurement_method',
-      'coordinates_data', 'coordinate_system', 'cadastral_cost', 'owner_name'
+      'boundary_description',
+      'boundary_agreement_act',
+      'adjacent_users',
+      'boundary_marker_type',
+      'accuracy_mt',
+      'measurement_method',
+      'coordinates_data',
+      'coordinate_system',
+      'cadastral_cost',
+      'owner_name',
     ];
     for (const col of columns) {
-      await queryRunner.query(`ALTER TABLE land_plots DROP COLUMN IF EXISTS ${col}`);
+      await queryRunner.query(
+        `ALTER TABLE land_plots DROP COLUMN IF EXISTS ${col}`,
+      );
     }
 
     // Remove status from projects
-    await queryRunner.query(`ALTER TABLE projects DROP CONSTRAINT IF EXISTS chk_project_status`);
-    await queryRunner.query(`ALTER TABLE projects DROP COLUMN IF EXISTS status`);
+    await queryRunner.query(
+      `ALTER TABLE projects DROP CONSTRAINT IF EXISTS chk_project_status`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE projects DROP COLUMN IF EXISTS status`,
+    );
 
     // Restore NOT NULL constraints
-    await queryRunner.query(`ALTER TABLE land_plots DROP CONSTRAINT IF EXISTS land_plots_cadastral_number_key`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN cadastral_number SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE (cadastral_number)`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN area SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN land_category SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN permitted_use SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN address SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN status SET NOT NULL`);
-    await queryRunner.query(`ALTER TABLE land_plots ALTER COLUMN registration_date SET NOT NULL`);
+    await queryRunner.query(
+      `ALTER TABLE land_plots DROP CONSTRAINT IF EXISTS land_plots_cadastral_number_key`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN cadastral_number SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ADD CONSTRAINT land_plots_cadastral_number_key UNIQUE (cadastral_number)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN area SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN land_category SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN permitted_use SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN address SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN status SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE land_plots ALTER COLUMN registration_date SET NOT NULL`,
+    );
   }
 }

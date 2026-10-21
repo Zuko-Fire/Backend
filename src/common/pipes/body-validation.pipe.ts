@@ -20,7 +20,12 @@ export class BodyValidationPipe implements PipeTransform<any> {
   async transform(value: any, metadata: ArgumentMetadata) {
     // Only validate body DTOs, skip query/param/user
     if (metadata.type !== 'body') {
-      console.log('Skipping validation for type:', metadata.type, 'data:', metadata.data);
+      console.log(
+        'Skipping validation for type:',
+        metadata.type,
+        'data:',
+        metadata.data,
+      );
       return value;
     }
     console.log('Validating body:', value);

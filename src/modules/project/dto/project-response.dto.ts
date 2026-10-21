@@ -13,7 +13,10 @@ export class ProjectResponseDto {
   @ApiPropertyOptional({ description: 'Project picture URL' })
   picture?: string;
 
-  @ApiProperty({ description: 'Project status', enum: ['draft', 'in_review', 'approved', 'returned'] })
+  @ApiProperty({
+    description: 'Project status',
+    enum: ['draft', 'in_review', 'approved', 'returned'],
+  })
   status!: string;
 
   @ApiProperty({ description: 'Owner user ID' })

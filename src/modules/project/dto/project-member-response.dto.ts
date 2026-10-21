@@ -7,7 +7,10 @@ export class ProjectMemberResponseDto {
   @ApiProperty({ description: 'User ID' })
   user_id!: number;
 
-  @ApiProperty({ description: 'User role in project', enum: ['viewer', 'editor', 'admin'] })
+  @ApiProperty({
+    description: 'User role in project',
+    enum: ['viewer', 'editor', 'admin'],
+  })
   roleInProject!: string;
 
   @ApiProperty({ description: 'Join timestamp' })

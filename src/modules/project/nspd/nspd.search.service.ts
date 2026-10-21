@@ -97,9 +97,7 @@ function createBoundingBoxFromPoint(
  * Проверка, что площадь контура не превышает лимит
  * Принимает Polygon или MultiPolygon coordinates
  */
-function estimateAreaSqDeg(
-  coordinates: number[][][] | number[][][][],
-): number {
+function estimateAreaSqDeg(coordinates: number[][][] | number[][][][]): number {
   // Простая оценка площади через min/max координаты
   let minLng = Infinity;
   let minLat = Infinity;
@@ -258,10 +256,7 @@ export class NSPDSearchService {
   /**
    * Поиск в конкретном слое по query.
    */
-  async searchInLayer(
-    query: string,
-    layerId: number,
-  ): Promise<NspdFeature[]> {
+  async searchInLayer(query: string, layerId: number): Promise<NspdFeature[]> {
     const params = {
       query,
       layersId: layerId,
@@ -319,10 +314,7 @@ export class NSPDSearchService {
   /**
    * Поиск одного объекта в конкретном слое.
    */
-  async findInLayer(
-    query: string,
-    layerId: number,
-  ): Promise<NspdFeature> {
+  async findInLayer(query: string, layerId: number): Promise<NspdFeature> {
     const results = await this.searchInLayer(query, layerId);
 
     if (results.length === 0) {
@@ -429,14 +421,18 @@ export class NSPDSearchService {
       );
 
       // Check for TooBigContourError in response body
-      if (responseBody && typeof responseBody === 'object' && 'code' in responseBody) {
+      if (
+        responseBody &&
+        typeof responseBody === 'object' &&
+        'code' in responseBody
+      ) {
         const resp = responseBody as any;
         if (resp.code === 400104) {
           throw new TooBigContourError(area);
         }
       }
 
-      return this.extractFeatures(responseBody as NSPDSearchResponse);
+      return this.extractFeatures(responseBody);
     } catch (error) {
       if (error instanceof Error && error.message?.includes('400104')) {
         throw new TooBigContourError(area);
@@ -490,8 +486,7 @@ export class NSPDSearchService {
         for (const feature of features) {
           // Уникализация по cad_num (если есть)
           const cadNum =
-            (feature.properties as any).cad_num ??
-            feature.properties?.cad_num;
+            (feature.properties as any).cad_num ?? feature.properties?.cad_num;
           const id = cadNum ?? JSON.stringify(feature.geometry);
 
           if (!seenIds.has(id)) {
@@ -527,8 +522,8 @@ export class NSPDSearchService {
 
         return {
           type: 'Feature',
-          geometry: feature.geometry as GeoJSONGeometry,
-          properties: feature.properties as NspdFeature['properties'],
+          geometry: feature.geometry,
+          properties: feature.properties,
           layerMeta,
         } as NspdFeature | null;
       })

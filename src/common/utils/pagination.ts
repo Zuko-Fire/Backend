@@ -24,7 +24,13 @@ export function paginate<T>(
   total: number,
   page: number,
   limit: number,
-): { data: T[]; total: number; page: number; limit: number; totalPages: number } {
+): {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+} {
   return {
     data,
     total,

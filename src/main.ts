@@ -35,9 +35,7 @@ async function bootstrap() {
 
   // Global filters and interceptors
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.useGlobalInterceptors(
-    new ClassSerializerInterceptor(app.get(Reflector)),
-  );
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   // Cookie parser
   app.use(cookieParser());

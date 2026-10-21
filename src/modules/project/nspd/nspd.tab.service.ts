@@ -20,7 +20,7 @@ const TAB_CLASS_MAP: Record<TabTitle, string> = {
   'Виды разрешенного использования': 'permissionType',
   'Состав ЕЗП': 'compositionLand',
   'Части ОКС': 'buildParts',
-  'Объекты': 'objectsList',
+  Объекты: 'objectsList',
 };
 
 /**
@@ -50,35 +50,50 @@ export class NSPDTabService {
   /**
    * Получить данные вкладки "Части ЗУ" (land parts).
    */
-  async tabLandParts(geomId: number, categoryId: number): Promise<string[] | null> {
+  async tabLandParts(
+    geomId: number,
+    categoryId: number,
+  ): Promise<string[] | null> {
     return this.getTabValues('landParts', geomId, categoryId);
   }
 
   /**
    * Получить данные вкладки "Связанные ЗУ" (linked land plots).
    */
-  async tabLandLinks(geomId: number, categoryId: number): Promise<string[] | null> {
+  async tabLandLinks(
+    geomId: number,
+    categoryId: number,
+  ): Promise<string[] | null> {
     return this.getTabValues('landLinks', geomId, categoryId);
   }
 
   /**
    * Получить данные вкладки "Виды разрешенного использования".
    */
-  async tabPermissionType(geomId: number, categoryId: number): Promise<string[] | null> {
+  async tabPermissionType(
+    geomId: number,
+    categoryId: number,
+  ): Promise<string[] | null> {
     return this.getTabValues('permissionType', geomId, categoryId);
   }
 
   /**
    * Получить данные вкладки "Состав ЕЗП" (real estate complex composition).
    */
-  async tabCompositionLand(geomId: number, categoryId: number): Promise<string[] | null> {
+  async tabCompositionLand(
+    geomId: number,
+    categoryId: number,
+  ): Promise<string[] | null> {
     return this.getTabValues('compositionLand', geomId, categoryId);
   }
 
   /**
    * Получить данные вкладки "Части ОКС" (building parts).
    */
-  async tabBuildParts(geomId: number, categoryId: number): Promise<string[] | null> {
+  async tabBuildParts(
+    geomId: number,
+    categoryId: number,
+  ): Promise<string[] | null> {
     return this.getTabValues('buildParts', geomId, categoryId);
   }
 
@@ -100,7 +115,9 @@ export class NSPDTabService {
         // Убираем двоеточие в конце названия
         const title = tab.title.replace(/[\s:]+$/, '');
         const val = tab.data?.value;
-        output[title] = Array.isArray(val) ? val.filter((v: any) => v && v !== '') : null;
+        output[title] = Array.isArray(val)
+          ? val.filter((v: any) => v && v !== '')
+          : null;
       }
     }
 
@@ -154,7 +171,7 @@ export class NSPDTabService {
         ? (NSPDTabResponse as any).safeParse(response)
         : response;
 
-      return this.extractStringArray((parsed as any)?.value);
+      return this.extractStringArray(parsed?.value);
     } catch (error) {
       this.logger.error(
         `Failed to get tab data (${tabClass}, geomId=${geomId}): ${error instanceof Error ? error.message : error}`,
@@ -194,7 +211,9 @@ export class NSPDTabService {
    * Извлечь массив строк из ответа вкладки.
    * Pynspd формат: value: string[] | null
    */
-  private extractStringArray(value: string[] | string | null | undefined): string[] | null {
+  private extractStringArray(
+    value: string[] | string | null | undefined,
+  ): string[] | null {
     if (value === null || value === undefined) return null;
 
     if (Array.isArray(value)) {
@@ -213,7 +232,9 @@ export class NSPDTabService {
 // ==================== Simple Zod-like parser ====================
 
 namespace NSPDTabResponse {
-  export function safeParse(data: any): { title: string; value: string[] | null } | null {
+  export function safeParse(
+    data: any,
+  ): { title: string; value: string[] | null } | null {
     if (!data || typeof data !== 'object') return null;
     const val = data.value;
     if (Array.isArray(val) && val.length === 1 && val[0] === '') {

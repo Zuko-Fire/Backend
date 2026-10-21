@@ -31,7 +31,9 @@ export function sanitizeOwner(
 /**
  * Removes password from member user object
  */
-export function sanitizeMemberUser(member: Record<string, unknown>): Record<string, unknown> {
+export function sanitizeMemberUser(
+  member: Record<string, unknown>,
+): Record<string, unknown> {
   const user = member.user as Record<string, unknown> | undefined;
   if (!user) return member;
 

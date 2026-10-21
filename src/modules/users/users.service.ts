@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserDto } from './dto/UserDto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
@@ -56,7 +60,9 @@ export class UsersService {
 
   async createUser(dto: CreateUserDto) {
     // Check if email already exists
-    const existing = await this.userRepo.findOne({ where: { email: dto.email } });
+    const existing = await this.userRepo.findOne({
+      where: { email: dto.email },
+    });
     if (existing) {
       throw new BadRequestException('Email already in use');
     }
@@ -84,7 +90,16 @@ export class UsersService {
       skip: (page - 1) * limit,
       take: limit,
       order: { createdAt: 'DESC' },
-      select: ['id', 'email', 'name', 'roles', 'isActive', 'avatar', 'createdAt', 'updatedAt'],
+      select: [
+        'id',
+        'email',
+        'name',
+        'roles',
+        'isActive',
+        'avatar',
+        'createdAt',
+        'updatedAt',
+      ],
     });
 
     return paginate(users, total, page, limit);

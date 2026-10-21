@@ -16,7 +16,12 @@ export class Polygon {
   @typeorm.Column({ type: 'jsonb' })
   coordinates!: any;
 
-  @typeorm.Column({ type: 'geometry', spatialFeatureType: 'Polygon', srid: 4326, nullable: true })
+  @typeorm.Column({
+    type: 'geometry',
+    spatialFeatureType: 'Polygon',
+    srid: 4326,
+    nullable: true,
+  })
   geometry!: string;
 
   @typeorm.Column({ name: 'created_by', type: 'int' })
@@ -44,7 +49,10 @@ export class Polygon {
   @typeorm.AfterLoad()
   private loadGeometry(): void {
     if (this.coordinates && !this.geometry) {
-      this.geometry = typeof this.coordinates === 'string' ? this.coordinates : JSON.stringify(this.coordinates);
+      this.geometry =
+        typeof this.coordinates === 'string'
+          ? this.coordinates
+          : JSON.stringify(this.coordinates);
     }
     // Parse coordinates string back to object if needed
     if (typeof this.coordinates === 'string') {
@@ -70,7 +78,9 @@ export class Polygon {
     if (coordsObj && coordsObj.type === 'Polygon' && coordsObj.coordinates) {
       // Convert GeoJSON Polygon to WKT for PostGIS
       const coords = coordsObj.coordinates[0] as number[][];
-      const wktPoints = coords.map((p: number[]) => `${p[0]} ${p[1]}`).join(', ');
+      const wktPoints = coords
+        .map((p: number[]) => `${p[0]} ${p[1]}`)
+        .join(', ');
       this.geometry = `POLYGON((${wktPoints}))`;
     }
   }
