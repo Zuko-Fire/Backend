@@ -67,7 +67,8 @@ export class AiService {
       projectId,
       conflicts,
       totalConflicts: conflicts.length,
-      criticalConflicts: conflicts.filter((c) => c.severity === 'critical').length,
+      criticalConflicts: conflicts.filter((c) => c.severity === 'critical')
+        .length,
     };
   }
 
@@ -109,7 +110,9 @@ export class AiService {
     options: DivisionOption[];
     totalOptions: number;
   }> {
-    this.logger.log(`Generating ${targetCount} division options for project ${projectId}`);
+    this.logger.log(
+      `Generating ${targetCount} division options for project ${projectId}`,
+    );
 
     // TODO: Implement AI-powered division algorithm
     // Consider:
@@ -146,7 +149,8 @@ export class AiService {
 
     // Placeholder response
     return {
-      response: 'AI модуль обрабатывает ваш запрос. Функция находится в разработке.',
+      response:
+        'AI модуль обрабатывает ваш запрос. Функция находится в разработке.',
       action: 'query',
       data: null,
     };
@@ -169,21 +173,32 @@ export class AiService {
 
     const lowerQuestion = question.toLowerCase();
 
-    if (lowerQuestion.includes('точность') || lowerQuestion.includes('погрешность')) {
+    if (
+      lowerQuestion.includes('точность') ||
+      lowerQuestion.includes('погрешность')
+    ) {
       return {
         question,
         answer:
           'Точность межевания зависит от категории земель. Для земель сельскохозяйственного назначения Mt = 2.5 м, для земель населённых пунктов и промышленных зон Mt = 1.0 м. Согласно пособию "Геодезические работы при землеустройстве" (Ципинова Б.С., 2016, стр. 77).',
-        references: ['Ципинова Б.С., стр. 77', 'Приказ Росреестра П/0159 от 06.04.2016'],
+        references: [
+          'Ципинова Б.С., стр. 77',
+          'Приказ Росреестра П/0159 от 06.04.2016',
+        ],
       };
     }
 
-    if (lowerQuestion.includes('акт') || lowerQuestion.includes('согласование')) {
+    if (
+      lowerQuestion.includes('акт') ||
+      lowerQuestion.includes('согласование')
+    ) {
       return {
         question,
         answer:
           'Акт согласования границ готовится на бумажном или электронном носителе. При электронном акте требуется УКЭП всех заинтересованных лиц. Акт включает данные о заинтересованных лицах, способ извещения, результат согласования по каждой границе.',
-        references: ['Требования подготовки документации межевого плана, п. 68-69'],
+        references: [
+          'Требования подготовки документации межевого плана, п. 68-69',
+        ],
       };
     }
 

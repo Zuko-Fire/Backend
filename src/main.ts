@@ -9,6 +9,7 @@ import { BodyValidationPipe } from './common/pipes/body-validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors();
 
   // Swagger
   const config = new DocumentBuilder()
@@ -35,9 +36,7 @@ async function bootstrap() {
 
   // Global filters and interceptors
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.useGlobalInterceptors(
-    new ClassSerializerInterceptor(app.get(Reflector)),
-  );
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   // Cookie parser
   app.use(cookieParser());

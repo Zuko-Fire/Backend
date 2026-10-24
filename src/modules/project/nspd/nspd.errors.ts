@@ -19,9 +19,7 @@ export class UnknownLayerError extends PynspdError {
     public readonly layerName?: string,
     public readonly categoryId?: number,
   ) {
-    super(
-      `Layer not found: ${layerName ?? `category_id=${categoryId}`}`,
-    );
+    super(`Layer not found: ${layerName ?? `category_id=${categoryId}`}`);
     this.name = 'UnknownLayerError';
   }
 }
@@ -43,9 +41,7 @@ export class AmbiguousSearchError extends PynspdError {
  * Область поиска слишком большая для одного запроса
  */
 export class TooBigContourError extends PynspdError {
-  constructor(
-    public readonly area?: number,
-  ) {
+  constructor(public readonly area?: number) {
     super(`Contour area is too large: ${area}`);
     this.name = 'TooBigContourError';
   }
@@ -152,10 +148,7 @@ export class NotFoundError extends PynspdResponseError {
 export class PynspdNetworkError extends PynspdError {
   public readonly originalError?: Error;
 
-  constructor(
-    message: string,
-    originalError?: Error,
-  ) {
+  constructor(message: string, originalError?: Error) {
     super(message);
     this.name = 'PynspdNetworkError';
     this.originalError = originalError;

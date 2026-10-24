@@ -1,12 +1,5 @@
 // auth/auth.controller.ts
-import {
-  Controller,
-  Get,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Roles } from 'src/common/decorators/auth/roles.decorator';
 import { User } from 'src/common/decorators/auth/user.decorator';
@@ -52,7 +45,8 @@ export class AuthController {
   @ApiBody({ type: RefreshDto })
   @ApiResponse({
     status: 201,
-    description: 'New access token returned. Refresh token set in httpOnly cookie.',
+    description:
+      'New access token returned. Refresh token set in httpOnly cookie.',
   })
   @ApiResponse({
     status: 401,

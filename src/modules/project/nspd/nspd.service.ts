@@ -205,9 +205,7 @@ export class NSPDService {
   latLonToWebMercator(lat: number, lng: number): { x: number; y: number } {
     const x = (lng * Math.PI * 6378137) / 180;
     const y =
-      (Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) *
-        6378137) /
-      Math.PI;
+      (Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) * 6378137) / Math.PI;
 
     return { x, y };
   }
@@ -218,10 +216,10 @@ export class NSPDService {
   webMercatorToLatLon(x: number, y: number): { lat: number; lng: number } {
     const lng = (x * 180) / (Math.PI * 6378137);
     const lat =
-      (2 * Math.atan(Math.exp((y * Math.PI) / (180 * 6378137))) -
+      ((2 * Math.atan(Math.exp((y * Math.PI) / (180 * 6378137))) -
         Math.PI / 2) *
-      180 /
-        Math.PI;
+        180) /
+      Math.PI;
 
     return { lat, lng };
   }
@@ -280,10 +278,7 @@ export class NSPDService {
   /**
    * Построить WMS URL для слоя.
    */
-  private buildWmsUrl(
-    layerId: number,
-    params: Record<string, string>,
-  ): string {
+  private buildWmsUrl(layerId: number, params: Record<string, string>): string {
     const url = new URL(`/aeggis/v3/${layerId}/wms`, this.client.getBaseUrl());
 
     for (const [key, value] of Object.entries(params)) {

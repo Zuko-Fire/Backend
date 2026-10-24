@@ -70,7 +70,8 @@ export class LandPlot {
     name: 'measurement_method',
     type: 'varchar',
     nullable: true,
-    comment: 'Метод определения координат (ГНСС/GNSS, тахеометр, фотограмметрия)',
+    comment:
+      'Метод определения координат (ГНСС/GNSS, тахеометр, фотограмметрия)',
   })
   measurement_method!: string | null;
 
@@ -126,7 +127,10 @@ export class LandPlot {
   @Column({ name: 'polygon_id', type: 'int', nullable: true })
   polygon_id!: number | null;
 
-  @ManyToOne(() => Polygon, (p) => p.landPlots, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Polygon, (p) => p.landPlots, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'polygon_id' })
   polygon!: Polygon | null;
 

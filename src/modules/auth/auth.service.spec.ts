@@ -35,7 +35,9 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     // ensure mocks have default behaviour each run
-    mockJwtService.sign.mockImplementation((p) => `signed(${JSON.stringify(p)})`);
+    mockJwtService.sign.mockImplementation(
+      (p) => `signed(${JSON.stringify(p)})`,
+    );
     mockJwtService.verify.mockImplementation((token) => {
       if (token.startsWith('valid:')) {
         return JSON.parse(token.slice(6));
@@ -125,7 +127,8 @@ describe('AuthService', () => {
   });
 
   describe('refreshToken', () => {
-    const goodToken = 'valid:' + JSON.stringify({ sub: 4, name: 'n', roles: [] });
+    const goodToken =
+      'valid:' + JSON.stringify({ sub: 4, name: 'n', roles: [] });
     it('throws when verify fails', async () => {
       await expect(service.refreshToken('bad')).rejects.toThrow();
     });
@@ -134,13 +137,24 @@ describe('AuthService', () => {
       await expect(service.refreshToken(goodToken)).rejects.toThrow();
     });
     it('throws when expired', async () => {
-      mockRepo.findOne.mockResolvedValue({ expiresAt: new Date(0), revoked: false });
+      mockRepo.findOne.mockResolvedValue({
+        expiresAt: new Date(0),
+        revoked: false,
+      });
       await expect(service.refreshToken(goodToken)).rejects.toThrow();
     });
     it('works when valid', async () => {
       const now = new Date();
-      mockRepo.findOne.mockResolvedValue({ expiresAt: new Date(now.getTime() + 10000), revoked: false, save: jest.fn() });
-      mockUsersService.findById.mockResolvedValue({ id: 4, name: 'n', roles: [] });
+      mockRepo.findOne.mockResolvedValue({
+        expiresAt: new Date(now.getTime() + 10000),
+        revoked: false,
+        save: jest.fn(),
+      });
+      mockUsersService.findById.mockResolvedValue({
+        id: 4,
+        name: 'n',
+        roles: [],
+      });
       mockRepo.save.mockResolvedValue({});
       const out = await service.refreshToken(goodToken);
       expect(out.access_token).toBeDefined();

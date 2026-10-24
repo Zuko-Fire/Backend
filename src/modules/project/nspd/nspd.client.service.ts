@@ -156,7 +156,11 @@ function httpReq(
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           resolve({ status: res.statusCode, body: responseBody, requestId });
         } else {
-          reject({ status: res.statusCode || 500, body: responseBody, requestId });
+          reject({
+            status: res.statusCode || 500,
+            body: responseBody,
+            requestId,
+          });
         }
       });
     });
@@ -188,7 +192,8 @@ export class NSPDClientService {
     const retriesRaw = this.configService.get<number>('NSPD_CLIENT_RETRIES');
     const retries = retriesRaw ?? 10;
     const retryOnBlockedIp =
-      this.configService.get<string>('NSPD_CLIENT_RETRY_ON_BLOCKED_IP') === 'true';
+      this.configService.get<string>('NSPD_CLIENT_RETRY_ON_BLOCKED_IP') ===
+      'true';
     const cacheTtlMsRaw = this.configService.get<number>('NSPD_CACHE_TTL_MS');
     const cacheTtlMs = cacheTtlMsRaw ?? 3_600_000;
 
@@ -264,8 +269,8 @@ export class NSPDClientService {
         let status = 0;
         let body: unknown;
         if (error && typeof error === 'object' && 'status' in error) {
-          status = (error as any).status;
-          body = (error as any).body;
+          status = error.status;
+          body = error.body;
         }
 
         if (!isRetryableError(error)) {
@@ -307,8 +312,8 @@ export class NSPDClientService {
         let status = 0;
         let bodyResp: unknown;
         if (error && typeof error === 'object' && 'status' in error) {
-          status = (error as any).status;
-          bodyResp = (error as any).body;
+          status = error.status;
+          bodyResp = error.body;
         }
 
         if (!isRetryableError(error)) {
@@ -334,7 +339,10 @@ export class NSPDClientService {
 
   // ==================== Internal ====================
 
-  buildUrl(path: string, params?: Record<string, string | number | boolean>): string {
+  buildUrl(
+    path: string,
+    params?: Record<string, string | number | boolean>,
+  ): string {
     const base = this.config.baseUrl.endsWith('/')
       ? this.config.baseUrl
       : this.config.baseUrl + '/';
@@ -351,24 +359,36 @@ export class NSPDClientService {
   }
 
   private async httpGet<T>(url: string): Promise<T> {
-    const result = await httpReq('GET', url, undefined, this.buildHeaders(), this.config.timeout);
+    const result = await httpReq(
+      'GET',
+      url,
+      undefined,
+      this.buildHeaders(),
+      this.config.timeout,
+    );
     return (result as any).body as T;
   }
 
   private async httpPost<T>(url: string, body: string): Promise<T> {
-    const result = await httpReq('POST', url, body, {
-      ...this.buildHeaders(),
-      'Content-Type': 'application/json',
-      'Content-Length': String(Buffer.byteLength(body)),
-    }, this.config.timeout);
+    const result = await httpReq(
+      'POST',
+      url,
+      body,
+      {
+        ...this.buildHeaders(),
+        'Content-Type': 'application/json',
+        'Content-Length': String(Buffer.byteLength(body)),
+      },
+      this.config.timeout,
+    );
     return (result as any).body as T;
   }
 
   private buildHeaders(): Record<string, string> {
     return {
       'User-Agent': generateUserAgent(),
-      'Referer': 'https://nspd.gov.ru/map?thematic=PKK',
-      'Host': 'nspd.gov.ru',
+      Referer: 'https://nspd.gov.ru/map?thematic=PKK',
+      Host: 'nspd.gov.ru',
     };
   }
 
@@ -382,8 +402,14 @@ export class NSPDClientService {
           resolve(addr);
         });
         socket.setTimeout(5000);
-        socket.on('error', () => { socket.destroy(); resolve(null); });
-        socket.on('timeout', () => { socket.destroy(); resolve(null); });
+        socket.on('error', () => {
+          socket.destroy();
+          resolve(null);
+        });
+        socket.on('timeout', () => {
+          socket.destroy();
+          resolve(null);
+        });
       });
     } catch {
       return null;

@@ -7,7 +7,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/guards/auth/jwt-auth.guard';
 import { User } from 'src/common/decorators/auth/user.decorator';
 import { UserDto } from '../users/dto/UserDto';
@@ -38,7 +43,12 @@ export class AiController {
   @ApiOperation({ summary: 'Генерация вариантов раздела участков' })
   @ApiResponse({ status: 200, description: 'Варианты раздела' })
   async generateDivisionOptions(
-    @Body() data: { projectId: number; targetCount: number; requirements?: any },
+    @Body()
+    data: {
+      projectId: number;
+      targetCount: number;
+      requirements?: any;
+    },
   ) {
     return this.aiService.generateDivisionOptions(
       data.projectId,

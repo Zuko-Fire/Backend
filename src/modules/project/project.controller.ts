@@ -64,7 +64,8 @@ export class ProjectController {
   @Roles('admin', 'super_admin')
   @ApiOperation({
     summary: 'Получить все проекты (только админы)',
-    description: 'Возвращает ВСЕ проекты в системе, независимо от доступа пользователя',
+    description:
+      'Возвращает ВСЕ проекты в системе, независимо от доступа пользователя',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
@@ -75,10 +76,7 @@ export class ProjectController {
   })
   @ApiResponse({ status: 401, description: 'Неавторизован' })
   @ApiResponse({ status: 403, description: 'Доступ только для админов' })
-  async findAllAdmin(
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
-  ) {
+  async findAllAdmin(@Query('page') page = 1, @Query('limit') limit = 10) {
     return this.projectsService.findAllProjects(+page, +limit);
   }
 
