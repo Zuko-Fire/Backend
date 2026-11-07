@@ -9,6 +9,7 @@ import {
   Res,
   BadRequestException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,6 +36,8 @@ interface SearchContourDto {
 @ApiBearerAuth('access-token')
 @Controller('projects/nspd')
 export class NSPDController {
+  private readonly logger = new Logger(NSPDController.name);
+
   constructor(
     private readonly nspdService: NSPDService,
     private readonly searchService: NSPDSearchService,
@@ -117,6 +120,86 @@ export class NSPDController {
       throw new BadRequestException('Не удалось получить легенду слоя');
     }
     return legend;
+  }
+
+  // ==================== Map Image Endpoints ====================
+
+  @Get('map/url')
+  @ApiOperation({ summary: 'Получить URL WMS-карты' })
+  @ApiQuery({ name: 'layerId', type: Number })
+  @ApiQuery({ name: 'minLng', type: Number })
+  @ApiQuery({ name: 'minLat', type: Number })
+  @ApiQuery({ name: 'maxLng', type: Number })
+  @ApiQuery({ name: 'maxLat', type: Number })
+  @ApiQuery({ name: 'width', type: Number, required: false })
+  @ApiQuery({ name: 'height', type: Number, required: false })
+  @ApiResponse({ status: 200, description: 'URL карты' })
+  async getMapUrl(
+    @Query('layerId') layerId: string,
+    @Query('minLng') minLng: string,
+    @Query('minLat') minLat: string,
+    @Query('maxLng') maxLng: string,
+    @Query('maxLat') maxLat: string,
+    @Query('width') widthStr?: string,
+    @Query('height') heightStr?: string,
+  ) {
+    const bbox: BoundingBox = {
+      minLng: parseFloat(minLng),
+      minLat: parseFloat(minLat),
+      maxLng: parseFloat(maxLng),
+      maxLat: parseFloat(maxLat),
+    };
+    const width = widthStr ? parseInt(widthStr, 10) : 1024;
+    const height = heightStr ? parseInt(heightStr, 10) : 1024;
+    return {
+      url: this.nspdService.getMapImageUrl(
+        parseInt(layerId, 10),
+        [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat],
+        width,
+        height,
+      ),
+    };
+  }
+
+  @Get('map')
+  @ApiOperation({ summary: 'Получить WMS-карту как изображение' })
+  @ApiQuery({ name: 'layerId', type: Number })
+  @ApiQuery({ name: 'minLng', type: Number })
+  @ApiQuery({ name: 'minLat', type: Number })
+  @ApiQuery({ name: 'maxLng', type: Number })
+  @ApiQuery({ name: 'maxLat', type: Number })
+  @ApiQuery({ name: 'width', type: Number, required: false })
+  @ApiQuery({ name: 'height', type: Number, required: false })
+  @ApiResponse({ status: 200, description: 'PNG изображение карты' })
+  async getMapImage(
+    @Query('layerId') layerId: string,
+    @Query('minLng') minLng: string,
+    @Query('minLat') minLat: string,
+    @Query('maxLng') maxLng: string,
+    @Query('maxLat') maxLat: string,
+    @Res() res: Response,
+    @Query('width') widthStr?: string,
+    @Query('height') heightStr?: string,
+  ) {
+    const bbox: BoundingBox = {
+      minLng: parseFloat(minLng),
+      minLat: parseFloat(minLat),
+      maxLng: parseFloat(maxLng),
+      maxLat: parseFloat(maxLat),
+    };
+    const width = widthStr ? parseInt(widthStr, 10) : 1024;
+    const height = heightStr ? parseInt(heightStr, 10) : 1024;
+    const image = await this.nspdService.getMapImage(
+      parseInt(layerId, 10),
+      [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat],
+      width,
+      height,
+    );
+    if (!image) {
+      throw new BadRequestException('Failed to fetch map image');
+    }
+    res.setHeader('Content-Type', 'image/png');
+    res.send(image);
   }
 
   // ==================== Search Endpoints ====================

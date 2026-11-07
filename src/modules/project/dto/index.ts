@@ -24,6 +24,11 @@ export * from './land-plot-response.dto';
 export * from './document-response.dto';
 export * from './map-view-response.dto';
 export * from './project-member-response.dto';
+export * from './layer-folder.dto';
+export * from './layer-object.dto';
+export * from './comment.dto';
+export * from './event.dto';
+export * from './update-land-plot.dto';
 
 export class CreateProjectDto {
   @ApiProperty({

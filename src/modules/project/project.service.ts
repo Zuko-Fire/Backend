@@ -16,6 +16,10 @@ import {
 } from './entities/project-members.entity';
 import { Project, ProjectStatus } from './entities/project.entity';
 import { Document, DocumentType } from './entities/document.entity';
+import { LayerFolder, LayerFolderType } from './entities/layer-folder.entity';
+import { LayerObject } from './entities/layer-object.entity';
+import { Comment } from './entities/comment.entity';
+import { Event, EventType } from './entities/event.entity';
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -25,6 +29,15 @@ import {
   CreateLandPlotDto,
   AddMemberDto,
   CreateMapViewDto,
+  UpdateLandPlotDto,
+  CreateLayerFolderDto,
+  UpdateLayerFolderDto,
+  CreateLayerObjectDto,
+  UpdateLayerObjectDto,
+  CreateCommentDto,
+  UpdateCommentDto,
+  CreateEventDto,
+  UpdateEventDto,
 } from './dto';
 import { sanitizeOwner, sanitizeMemberUser } from 'src/common/utils/sanitize';
 import { User } from 'src/modules/users/entities/user.entity';
@@ -46,6 +59,12 @@ export class ProjectService {
     @InjectRepository(ProjectMembers)
     private membersRepo: Repository<ProjectMembers>,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(LayerFolder)
+    private layerFolderRepo: Repository<LayerFolder>,
+    @InjectRepository(LayerObject)
+    private layerObjectRepo: Repository<LayerObject>,
+    @InjectRepository(Comment) private commentRepo: Repository<Comment>,
+    @InjectRepository(Event) private eventRepo: Repository<Event>,
     private dataSource: DataSource,
   ) {}
 
@@ -810,5 +829,554 @@ export class ProjectService {
     await this.checkProjectAccess(doc.project_id, userId, ['admin']);
     await Document.delete(documentId);
     return { message: 'Document deleted successfully' };
+  }
+
+  // ==================== Layer Folders ====================
+
+  async getLayerFolders(projectId: number, userId: number) {
+    await this.checkProjectAccess(projectId, userId);
+
+    const folders = await this.layerFolderRepo.find({
+      where: { projectId },
+      order: { orderIndex: 'ASC' },
+    });
+
+    return this.buildFolderTree(folders);
+  }
+
+  async createLayerFolder(
+    projectId: number,
+    dto: CreateLayerFolderDto,
+    userId: number,
+  ) {
+    await this.checkProjectAccess(projectId, userId, ['admin', 'editor']);
+
+    // If parent is specified, check it belongs to the same project
+    if (dto.parentId) {
+      const parent = await this.layerFolderRepo.findOne({
+        where: { id: dto.parentId, projectId },
+      });
+      if (!parent) {
+        throw new NotFoundException('Parent folder not found');
+      }
+    }
+
+    const folder = this.layerFolderRepo.create({
+      ...dto,
+      projectId,
+    });
+
+    return this.layerFolderRepo.save(folder);
+  }
+
+  async updateLayerFolder(
+    folderId: number,
+    dto: UpdateLayerFolderDto,
+    userId: number,
+  ) {
+    const folder = await this.layerFolderRepo.findOne({
+      where: { id: folderId },
+      relations: ['project'],
+    });
+
+    if (!folder) {
+      throw new NotFoundException('Layer folder not found');
+    }
+
+    await this.checkProjectAccess(
+      (folder as any).projectId,
+      userId,
+      ['admin', 'editor'],
+    );
+
+    if (dto.parentId) {
+      const parent = await this.layerFolderRepo.findOne({
+        where: { id: dto.parentId },
+      });
+      if (parent && parent.id === folderId) {
+        throw new BadRequestException('Folder cannot be its own parent');
+      }
+      if (parent && parent.projectId !== folder.projectId) {
+        throw new BadRequestException('Parent folder must belong to the same project');
+      }
+    }
+
+    Object.assign(folder, dto);
+    return this.layerFolderRepo.save(folder);
+  }
+
+  async removeLayerFolder(folderId: number, userId: number) {
+    const folder = await this.layerFolderRepo.findOne({
+      where: { id: folderId },
+      relations: ['project'],
+    });
+
+    if (!folder) {
+      throw new NotFoundException('Layer folder not found');
+    }
+
+    await this.checkProjectAccess(
+      (folder as any).projectId,
+      userId,
+      ['admin'],
+    );
+
+    // Delete children first
+    await this.layerFolderRepo.delete({ parentId: folderId });
+    await this.layerFolderRepo.delete(folderId);
+    return { message: 'Layer folder deleted successfully' };
+  }
+
+  /**
+   * Build hierarchical tree from flat list of folders
+   */
+  private buildFolderTree(folders: LayerFolder[]): any[] {
+    const folderMap = new Map<number, any>();
+    const roots: any[] = [];
+
+    folders.forEach((folder) => {
+      folderMap.set(folder.id, {
+        ...folder,
+        children: [],
+      });
+    });
+
+    folders.forEach((folder) => {
+      const node = folderMap.get(folder.id)!;
+      if (folder.parentId && folderMap.has(folder.parentId)) {
+        folderMap.get(folder.parentId)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    return roots;
+  }
+
+  // ==================== Layer Objects (Figma/Photoshop style) ====================
+
+  /**
+   * Get all objects (polygons) on a layer/folder
+   * Returns objects with their layer-specific properties (visibility, opacity, etc.)
+   */
+  async getLayerObjects(layerFolderId: number, userId: number) {
+    const folder = await this.layerFolderRepo.findOne({
+      where: { id: layerFolderId },
+      relations: ['project'],
+    });
+
+    if (!folder) {
+      throw new NotFoundException('Layer folder not found');
+    }
+
+    await this.checkProjectAccess(
+      (folder as any)[DB.PROJECT.ID],
+      userId,
+    );
+
+    return this.layerObjectRepo.find({
+      where: { layerFolderId },
+      relations: ['polygon', 'user'],
+      order: { orderIndex: 'ASC' },
+    });
+  }
+
+  /**
+   * Add a polygon as an object to a layer/folder
+   * Like adding a shape layer in Figma/Photoshop
+   */
+  async createLayerObject(
+    projectId: number,
+    dto: CreateLayerObjectDto,
+    userId: number,
+  ) {
+    await this.checkProjectAccess(projectId, userId, ['admin', 'editor']);
+
+    // Verify layer folder belongs to this project
+    const folder = await this.layerFolderRepo.findOne({
+      where: { id: dto.layerFolderId, projectId },
+    });
+    if (!folder) {
+      throw new NotFoundException('Layer folder not found');
+    }
+
+    // Verify polygon exists
+    const polygon = await this.polygonRepo.findOne({
+      where: { id: dto.polygonId },
+    });
+    if (!polygon) {
+      throw new NotFoundException('Polygon not found');
+    }
+
+    // Check if this polygon is already on this layer
+    const existing = await this.layerObjectRepo.findOne({
+      where: { layerFolderId: dto.layerFolderId, polygonId: dto.polygonId },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        'Polygon already exists on this layer',
+      );
+    }
+
+    const layerObject = this.layerObjectRepo.create({
+      ...dto,
+      layerFolderId: dto.layerFolderId,
+      polygonId: dto.polygonId,
+      userId,
+      isVisible: dto.isVisible ?? true,
+      isLocked: dto.isLocked ?? false,
+      opacity: dto.opacity ?? 1.0,
+    });
+
+    return this.layerObjectRepo.save(layerObject);
+  }
+
+  /**
+   * Update layer object properties (visibility, opacity, name, etc.)
+   */
+  async updateLayerObject(
+    layerObjectId: number,
+    dto: UpdateLayerObjectDto,
+    userId: number,
+  ) {
+    const layerObject = await this.layerObjectRepo.findOne({
+      where: { id: layerObjectId },
+      relations: ['layerFolder', 'layerFolder.project'],
+    });
+
+    if (!layerObject) {
+      throw new NotFoundException('Layer object not found');
+    }
+
+      await this.checkProjectAccess(
+        (layerObject.layerFolder as any).projectId,
+        userId,
+        ['admin', 'editor'],
+      );
+
+    Object.assign(layerObject, dto);
+    return this.layerObjectRepo.save(layerObject);
+  }
+
+  /**
+   * Remove an object from a layer (doesn't delete the polygon itself)
+   */
+  async removeLayerObject(layerObjectId: number, userId: number) {
+    const layerObject = await this.layerObjectRepo.findOne({
+      where: { id: layerObjectId },
+      relations: ['layerFolder', 'layerFolder.project'],
+    });
+
+    if (!layerObject) {
+      throw new NotFoundException('Layer object not found');
+    }
+
+      await this.checkProjectAccess(
+        (layerObject.layerFolder as any).projectId,
+        userId,
+        ['admin'],
+      );
+
+    await this.layerObjectRepo.delete(layerObjectId);
+    return { message: 'Layer object removed successfully' };
+  }
+
+  /**
+   * Get all layer objects for a project, organized by layer/folder
+   */
+  async getProjectLayerObjects(projectId: number, userId: number) {
+    await this.checkProjectAccess(projectId, userId);
+
+    const layerObjects = await this.layerObjectRepo.find({
+      where: { layerFolder: { projectId } },
+      relations: ['layerFolder', 'polygon', 'user'],
+      order: { layerFolder: { orderIndex: 'ASC' }, orderIndex: 'ASC' },
+    });
+
+    // Group by layer folder
+    const grouped = new Map<number, any[]>();
+    layerObjects.forEach((lo) => {
+      const folderId = (lo.layerFolder as any).id;
+      if (!grouped.has(folderId)) {
+        grouped.set(folderId, []);
+      }
+      grouped.get(folderId)!.push({
+        id: lo.id,
+        objectName: lo.objectName,
+        isVisible: lo.isVisible,
+        isLocked: lo.isLocked,
+        opacity: lo.opacity,
+        orderIndex: lo.orderIndex,
+        polygon: {
+          id: lo.polygon.id,
+          name: lo.polygon.name,
+          coordinates: lo.polygon.coordinates,
+        },
+        user: lo.user,
+      });
+    });
+
+    return Object.fromEntries(grouped);
+  }
+
+  // ==================== Comments ====================
+
+  async getComments(projectId: number, userId?: number) {
+    if (userId) {
+      await this.checkProjectAccess(projectId, userId);
+    }
+
+    return this.commentRepo.find({
+      where: { project_id: projectId },
+      relations: ['user', 'resolvedBy'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async createComment(projectId: number, dto: CreateCommentDto, userId: number) {
+    await this.checkProjectAccess(projectId, userId);
+
+    const comment = this.commentRepo.create({
+      ...dto,
+      project_id: projectId,
+      user_id: userId,
+      status: dto.status || 'open',
+    });
+
+    return this.commentRepo.save(comment);
+  }
+
+  async updateComment(
+    commentId: number,
+    dto: UpdateCommentDto,
+    userId: number,
+  ) {
+    const comment = await this.commentRepo.findOne({
+      where: { id: commentId },
+      relations: ['project'],
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    await this.checkProjectAccess(
+      (comment as any)[DB.PROJECT.ID],
+      userId,
+      ['admin', 'editor'],
+    );
+
+    if (dto.status === 'resolved') {
+      (comment as any).resolved_at = new Date();
+      (comment as any).resolved_by = userId;
+    }
+
+    Object.assign(comment, dto);
+    return this.commentRepo.save(comment);
+  }
+
+  async removeComment(commentId: number, userId: number) {
+    const comment = await this.commentRepo.findOne({
+      where: { id: commentId },
+      relations: ['project'],
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    await this.checkProjectAccess(
+      (comment as any)[DB.PROJECT.ID],
+      userId,
+      ['admin', 'editor'],
+    );
+
+    await this.commentRepo.delete(commentId);
+    return { message: 'Comment deleted successfully' };
+  }
+
+  // ==================== Events ====================
+
+  async getEvents(projectId: number, userId?: number) {
+    if (userId) {
+      await this.checkProjectAccess(projectId, userId);
+    }
+
+    return this.eventRepo.find({
+      where: { project_id: projectId },
+      relations: ['user'],
+      order: { due_date: 'ASC', createdAt: 'DESC' },
+    });
+  }
+
+  async createEvent(projectId: number, dto: CreateEventDto, userId: number) {
+    await this.checkProjectAccess(projectId, userId);
+
+    const event = this.eventRepo.create({
+      ...dto,
+      project_id: projectId,
+      user_id: userId,
+    });
+
+    return this.eventRepo.save(event);
+  }
+
+  async updateEvent(eventId: number, dto: UpdateEventDto, userId: number) {
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['project'],
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    await this.checkProjectAccess(
+      (event as any)[DB.PROJECT.ID],
+      userId,
+      ['admin', 'editor'],
+    );
+
+    if (dto.isDone === true) {
+      (event as any).done_at = new Date();
+    }
+
+    Object.assign(event, dto);
+    return this.eventRepo.save(event);
+  }
+
+  async removeEvent(eventId: number, userId: number) {
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['project'],
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    await this.checkProjectAccess(
+      (event as any)[DB.PROJECT.ID],
+      userId,
+      ['admin'],
+    );
+
+    await this.eventRepo.delete(eventId);
+    return { message: 'Event deleted successfully' };
+  }
+
+  // ==================== Land Plot Update ====================
+
+  async updateLandPlot(id: number, dto: UpdateLandPlotDto, userId: number) {
+    const plot = await this.landPlotRepo.findOne({
+      where: { id },
+      relations: ['polygon', 'project'],
+    });
+
+    if (!plot) {
+      throw new NotFoundException('Land plot not found');
+    }
+
+    // Check access through polygon's project or direct project_id
+    const projectId =
+      (plot as any).project_id ||
+      (plot.polygon && (plot.polygon as any)[DB.POLYGON.PROJECT_ID]);
+
+    if (projectId) {
+      await this.checkProjectAccess(projectId, userId, ['admin', 'editor']);
+    }
+
+    // Check for duplicate cadastral number if being updated
+    if (dto.cadastral_number && dto.cadastral_number !== plot.cadastral_number) {
+      const existing = await this.landPlotRepo.findOne({
+        where: { [DB.LAND_PLOT.CADASTRAL_NUMBER]: dto.cadastral_number },
+      });
+      if (existing) {
+        throw new BadRequestException('Кадастровый номер уже существует');
+      }
+    }
+
+    // Update polygon_id relationship
+    if (dto.polygon_id !== undefined) {
+      if (dto.polygon_id) {
+        const polygon = await this.polygonRepo.findOne({
+          where: { id: dto.polygon_id },
+        });
+        if (!polygon) {
+          throw new NotFoundException('Polygon not found');
+        }
+      }
+    }
+
+    Object.assign(plot, dto);
+    return this.landPlotRepo.save(plot);
+  }
+
+  // ==================== Enhanced Polygon Search ====================
+
+  /**
+   * Find nearest polygons to a point, ordered by distance
+   * Includes all polygons (even from projects user doesn't have access to)
+   */
+  async findNearestPolygons(
+    lat: number,
+    lon: number,
+    limit: number = 20,
+  ) {
+    const query = this.polygonRepo
+      .createQueryBuilder('polygon')
+      .where(
+        `ST_DWithin(
+          polygon.geometry::geometry,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${POSTGIS_SRID}),
+          :radius
+        )`,
+      )
+      .orderBy(
+        `ST_Distance(
+          polygon.geometry::geometry,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${POSTGIS_SRID})
+        )`,
+        'ASC',
+      )
+      .limit(limit)
+      .setParameters({ lat, lon, radius: MAX_SEARCH_RADIUS_METERS });
+
+    return query.getMany();
+  }
+
+  /**
+   * Check if a polygon intersects with any existing polygons
+   * Returns list of intersecting polygons with intersection details
+   */
+  async checkPolygonIntersections(
+    coordinates: any,
+    excludePolygonId?: number,
+  ) {
+    const wktPoints = coordinates.coordinates[0]
+      .map((p: number[]) => `${p[0]} ${p[1]}`)
+      .join(', ');
+    const wkt = `POLYGON((${wktPoints}))`;
+
+    const query = this.polygonRepo
+      .createQueryBuilder('polygon')
+      .where('ST_Intersects(polygon.geometry::geometry, ST_GeomFromText(:wkt, 4326))')
+      .setParameter('wkt', wkt);
+
+    if (excludePolygonId) {
+      query.andWhere('polygon.id != :excludePolygonId', { excludePolygonId });
+    }
+
+    const intersectingPolygons = await query.getMany();
+
+    return {
+      intersects: intersectingPolygons.length > 0,
+      count: intersectingPolygons.length,
+      polygons: intersectingPolygons.map((p) => ({
+        id: p.id,
+        name: p.name,
+        project_id: (p as any).project_id,
+      })),
+    };
   }
 }

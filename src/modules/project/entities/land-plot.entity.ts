@@ -5,14 +5,30 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { Polygon } from './polygon.entity';
 import { Document } from './document.entity';
+import { Project } from './project.entity';
 
 @Entity('land_plots')
 export class LandPlot {
   @PrimaryGeneratedColumn()
   id!: number;
+
+  @Column({ name: 'project_id', type: 'int', nullable: true })
+  project_id!: number | null;
+
+  @ManyToOne(() => Project, (p) => p.landPlots, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'project_id' })
+  project!: Project | null;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt!: Date;
 
   @Column({ unique: true, nullable: true, type: 'varchar' })
   cadastral_number!: string | null;
