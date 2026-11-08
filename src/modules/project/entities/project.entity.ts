@@ -14,6 +14,11 @@ import { Polygon } from './polygon.entity';
 import { MapView } from './map-view.entity';
 import { ProjectMembers } from './project-members.entity';
 import { Document } from './document.entity';
+import { LayerFolder } from './layer-folder.entity';
+import { LayerObject } from './layer-object.entity';
+import { Comment } from './comment.entity';
+import { Event } from './event.entity';
+import { LandPlot } from './land-plot.entity';
 
 export enum ProjectStatus {
   DRAFT = 'draft', // Черновик
@@ -70,4 +75,19 @@ export class Project {
 
   @OneToMany(() => Document, (doc) => doc.project)
   documents!: Document[];
+
+  @OneToMany(() => LayerFolder, (lf) => lf.project)
+  layerFolders!: LayerFolder[];
+
+  @OneToMany(() => LayerObject, (lo) => lo.layerFolder)
+  layerObjects!: LayerObject[];
+
+  @OneToMany(() => Comment, (c) => c.project)
+  comments!: Comment[];
+
+  @OneToMany(() => Event, (e) => e.project)
+  events!: Event[];
+
+  @OneToMany(() => LandPlot, (lp) => lp.project)
+  landPlots!: LandPlot[];
 }
