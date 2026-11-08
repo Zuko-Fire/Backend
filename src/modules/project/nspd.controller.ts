@@ -71,7 +71,12 @@ export class NSPDController {
     ],
   })
   async getLayers() {
-    return this.nspdService.getLayers();
+    try {
+      return await this.nspdService.getLayers();
+    } catch (error: any) {
+      this.logger.warn(`getLayers failed: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения слоёв: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   @Get('layers/:layerId')
@@ -91,11 +96,17 @@ export class NSPDController {
   })
   @ApiResponse({ status: 404, description: 'Слой не найден' })
   async getLayerInfo(@Param('layerId', ParseIntPipe) layerId: number) {
-    const layer = await this.nspdService.getLayerInfo(layerId);
-    if (!layer) {
-      throw new BadRequestException('Слой не найден');
+    try {
+      const layer = await this.nspdService.getLayerInfo(layerId);
+      if (!layer) {
+        throw new BadRequestException('Слой не найден');
+      }
+      return layer;
+    } catch (error: any) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.warn(`getLayerInfo failed layerId=${layerId}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения слоя: ${error?.message ?? 'неизвестная ошибка'}`);
     }
-    return layer;
   }
 
   @Get('layers/:layerId/legend')
@@ -115,11 +126,17 @@ export class NSPDController {
     content: { 'application/json': {} },
   })
   async getLayerLegend(@Param('layerId', ParseIntPipe) layerId: number) {
-    const legend = await this.nspdService.getLayerLegend(layerId);
-    if (!legend) {
-      throw new BadRequestException('Не удалось получить легенду слоя');
+    try {
+      const legend = await this.nspdService.getLayerLegend(layerId);
+      if (!legend) {
+        throw new BadRequestException('Не удалось получить легенду слоя');
+      }
+      return legend;
+    } catch (error: any) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.warn(`getLayerLegend failed layerId=${layerId}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения легенды: ${error?.message ?? 'неизвестная ошибка'}`);
     }
-    return legend;
   }
 
   // ==================== Map Image Endpoints ====================
@@ -134,6 +151,7 @@ export class NSPDController {
   @ApiQuery({ name: 'width', type: Number, required: false })
   @ApiQuery({ name: 'height', type: Number, required: false })
   @ApiResponse({ status: 200, description: 'URL карты' })
+  @ApiResponse({ status: 400, description: 'Неверные параметры BBox' })
   async getMapUrl(
     @Query('layerId') layerId: string,
     @Query('minLng') minLng: string,
@@ -149,6 +167,9 @@ export class NSPDController {
       maxLng: parseFloat(maxLng),
       maxLat: parseFloat(maxLat),
     };
+    if (isNaN(bbox.minLng) || isNaN(bbox.minLat) || isNaN(bbox.maxLng) || isNaN(bbox.maxLat)) {
+      throw new BadRequestException('Неверные параметры BBox (minLng, minLat, maxLng, maxLat должны быть числами)');
+    }
     const width = widthStr ? parseInt(widthStr, 10) : 1024;
     const height = heightStr ? parseInt(heightStr, 10) : 1024;
     return {
@@ -171,6 +192,7 @@ export class NSPDController {
   @ApiQuery({ name: 'width', type: Number, required: false })
   @ApiQuery({ name: 'height', type: Number, required: false })
   @ApiResponse({ status: 200, description: 'PNG изображение карты' })
+  @ApiResponse({ status: 400, description: 'Неверные параметры BBox' })
   async getMapImage(
     @Query('layerId') layerId: string,
     @Query('minLng') minLng: string,
@@ -187,19 +209,27 @@ export class NSPDController {
       maxLng: parseFloat(maxLng),
       maxLat: parseFloat(maxLat),
     };
+    if (isNaN(bbox.minLng) || isNaN(bbox.minLat) || isNaN(bbox.maxLng) || isNaN(bbox.maxLat)) {
+      throw new BadRequestException('Неверные параметры BBox (minLng, minLat, maxLng, maxLat должны быть числами)');
+    }
     const width = widthStr ? parseInt(widthStr, 10) : 1024;
     const height = heightStr ? parseInt(heightStr, 10) : 1024;
-    const image = await this.nspdService.getMapImage(
-      parseInt(layerId, 10),
-      [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat],
-      width,
-      height,
-    );
-    if (!image) {
-      throw new BadRequestException('Failed to fetch map image');
+    try {
+      const image = await this.nspdService.getMapImage(
+        parseInt(layerId, 10),
+        [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat],
+        width,
+        height,
+      );
+      if (!image) {
+        throw new BadRequestException('Не удалось получить изображение карты');
+      }
+      res.setHeader('Content-Type', 'image/png');
+      res.send(image);
+    } catch (error: any) {
+      this.logger.warn(`getMapImage failed: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения карты: ${error?.message ?? 'неизвестная ошибка'}`);
     }
-    res.setHeader('Content-Type', 'image/png');
-    res.send(image);
   }
 
   // ==================== Search Endpoints ====================
@@ -346,14 +376,23 @@ export class NSPDController {
   @ApiParam({ name: 'geomId', type: Number })
   @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив частей ЗУ' })
+  @ApiResponse({ status: 400, description: 'Неверный geomId или categoryId' })
+  @ApiResponse({ status: 502, description: 'Ошибка NSPD сервера' })
   async tabLandParts(
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabLandParts(
-      parseInt(geomId, 10),
-      parseInt(categoryId, 10),
-    );
+    const geomIdNum = parseInt(geomId, 10);
+    const catIdNum = parseInt(categoryId, 10);
+    if (isNaN(geomIdNum) || isNaN(catIdNum)) {
+      throw new BadRequestException('Неверный geomId или categoryId');
+    }
+    try {
+      return await this.tabService.tabLandParts(geomIdNum, catIdNum);
+    } catch (error: any) {
+      this.logger.warn(`tabLandParts failed geomId=${geomIdNum}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения частей ЗУ: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   @Get('tab/land-links/:geomId')
@@ -361,14 +400,22 @@ export class NSPDController {
   @ApiParam({ name: 'geomId', type: Number })
   @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив связанных ЗУ' })
+  @ApiResponse({ status: 400, description: 'Неверный geomId или categoryId' })
   async tabLandLinks(
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabLandLinks(
-      parseInt(geomId, 10),
-      parseInt(categoryId, 10),
-    );
+    const geomIdNum = parseInt(geomId, 10);
+    const catIdNum = parseInt(categoryId, 10);
+    if (isNaN(geomIdNum) || isNaN(catIdNum)) {
+      throw new BadRequestException('Неверный geomId или categoryId');
+    }
+    try {
+      return await this.tabService.tabLandLinks(geomIdNum, catIdNum);
+    } catch (error: any) {
+      this.logger.warn(`tabLandLinks failed geomId=${geomIdNum}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения связанных ЗУ: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   @Get('tab/permission-type/:geomId')
@@ -378,14 +425,22 @@ export class NSPDController {
   @ApiParam({ name: 'geomId', type: Number })
   @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив видов использования' })
+  @ApiResponse({ status: 400, description: 'Неверный geomId или categoryId' })
   async tabPermissionType(
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabPermissionType(
-      parseInt(geomId, 10),
-      parseInt(categoryId, 10),
-    );
+    const geomIdNum = parseInt(geomId, 10);
+    const catIdNum = parseInt(categoryId, 10);
+    if (isNaN(geomIdNum) || isNaN(catIdNum)) {
+      throw new BadRequestException('Неверный geomId или categoryId');
+    }
+    try {
+      return await this.tabService.tabPermissionType(geomIdNum, catIdNum);
+    } catch (error: any) {
+      this.logger.warn(`tabPermissionType failed geomId=${geomIdNum}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения видов использования: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   @Get('tab/composition-land/:geomId')
@@ -393,14 +448,22 @@ export class NSPDController {
   @ApiParam({ name: 'geomId', type: Number })
   @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив состава ЕЗП' })
+  @ApiResponse({ status: 400, description: 'Неверный geomId или categoryId' })
   async tabCompositionLand(
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabCompositionLand(
-      parseInt(geomId, 10),
-      parseInt(categoryId, 10),
-    );
+    const geomIdNum = parseInt(geomId, 10);
+    const catIdNum = parseInt(categoryId, 10);
+    if (isNaN(geomIdNum) || isNaN(catIdNum)) {
+      throw new BadRequestException('Неверный geomId или categoryId');
+    }
+    try {
+      return await this.tabService.tabCompositionLand(geomIdNum, catIdNum);
+    } catch (error: any) {
+      this.logger.warn(`tabCompositionLand failed geomId=${geomIdNum}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения состава ЕЗП: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   @Get('tab/build-parts/:geomId')
@@ -408,14 +471,22 @@ export class NSPDController {
   @ApiParam({ name: 'geomId', type: Number })
   @ApiQuery({ name: 'categoryId', type: Number })
   @ApiResponse({ status: 200, description: 'Массив частей ОКС' })
+  @ApiResponse({ status: 400, description: 'Неверный geomId или categoryId' })
   async tabBuildParts(
     @Param('geomId') geomId: string,
     @Query('categoryId') categoryId: string,
   ) {
-    return this.tabService.tabBuildParts(
-      parseInt(geomId, 10),
-      parseInt(categoryId, 10),
-    );
+    const geomIdNum = parseInt(geomId, 10);
+    const catIdNum = parseInt(categoryId, 10);
+    if (isNaN(geomIdNum) || isNaN(catIdNum)) {
+      throw new BadRequestException('Неверный geomId или categoryId');
+    }
+    try {
+      return await this.tabService.tabBuildParts(geomIdNum, catIdNum);
+    } catch (error: any) {
+      this.logger.warn(`tabBuildParts failed geomId=${geomIdNum}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения частей ОКС: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   @Get('tab/objects')
@@ -425,14 +496,22 @@ export class NSPDController {
   @ApiQuery({ name: 'objdocId', type: Number })
   @ApiQuery({ name: 'registersId', type: Number })
   @ApiResponse({ status: 200, description: 'Словарь объектов по регистрам' })
+  @ApiResponse({ status: 400, description: 'Неверный objdocId или registersId' })
   async tabObjectsList(
     @Query('objdocId') objdocId: string,
     @Query('registersId') registersId: string,
   ) {
-    return this.tabService.tabObjectsList(
-      parseInt(objdocId, 10),
-      parseInt(registersId, 10),
-    );
+    const objDocId = parseInt(objdocId, 10);
+    const regId = parseInt(registersId, 10);
+    if (isNaN(objDocId) || isNaN(regId)) {
+      throw new BadRequestException('Неверный objdocId или registersId');
+    }
+    try {
+      return await this.tabService.tabObjectsList(objDocId, regId);
+    } catch (error: any) {
+      this.logger.warn(`tabObjectsList failed objdocId=${objDocId}: ${error?.message ?? error}`);
+      throw new BadRequestException(`Ошибка получения объектов: ${error?.message ?? 'неизвестная ошибка'}`);
+    }
   }
 
   // ==================== Coordinate Conversion ====================
