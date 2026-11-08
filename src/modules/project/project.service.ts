@@ -562,7 +562,7 @@ export class ProjectService {
         throw new NotFoundException('Polygon not found');
       }
       await this.checkProjectAccess(
-        (polygon as any)[DB.POLYGON.PROJECT_ID],
+        polygon.project_id,
         userId!,
         ['admin', 'editor'],
       );
@@ -1015,7 +1015,7 @@ export class ProjectService {
     }
 
     await this.checkProjectAccess(
-      (folder as any)[DB.PROJECT.ID],
+      folder.projectId,
       userId,
     );
 
@@ -1404,10 +1404,13 @@ export class ProjectService {
    * Returns list of intersecting polygons with intersection details
    */
   async checkPolygonIntersections(
-    coordinates: any,
+    body: any,
     excludePolygonId?: number,
   ) {
-    const wktPoints = coordinates.coordinates[0]
+    const coords = body.coordinates ?? body;
+    // GeoJSON: {type: "Polygon", coordinates: [[[lng, lat], ...]]}
+    const ring = coords.coordinates ?? coords;
+    const wktPoints = ring[0]
       .map((p: number[]) => `${p[0]} ${p[1]}`)
       .join(', ');
     const wkt = `POLYGON((${wktPoints}))`;

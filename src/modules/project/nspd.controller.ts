@@ -217,7 +217,12 @@ export class NSPDController {
       throw new BadRequestException('Query is required');
     }
     const theme = themeId ? parseInt(themeId, 10) : ThemeId.REAL_ESTATE_OBJECTS;
-    return this.searchService.search(query, theme as ThemeId);
+    try {
+      return await this.searchService.search(query, theme as ThemeId);
+    } catch (error: any) {
+      this.logger.warn(`NSPD search failed for "${query}": ${error?.message ?? error}`);
+      return [];
+    }
   }
 
   @Get('search/layer')
@@ -232,7 +237,12 @@ export class NSPDController {
     if (!query) {
       throw new BadRequestException('Query is required');
     }
-    return this.searchService.searchInLayer(query, parseInt(layerId, 10));
+    try {
+      return await this.searchService.searchInLayer(query, parseInt(layerId, 10));
+    } catch (error: any) {
+      this.logger.warn(`NSPD searchInLayer failed for layer ${layerId}: ${error?.message ?? error}`);
+      return [];
+    }
   }
 
   @Get('search/at-point')
@@ -259,12 +269,19 @@ export class NSPDController {
     const layerInfo = await this.nspdService.getLayerInfo(layerIdNum);
     const layerName = layerInfo?.name ?? String(layerIdNum);
 
-    return this.searchService.searchAtPoint(
-      latNum,
-      lngNum,
-      layerIdNum,
-      layerName,
-    );
+    try {
+      return await this.searchService.searchAtPoint(
+        latNum,
+        lngNum,
+        layerIdNum,
+        layerName,
+      );
+    } catch (error: any) {
+      this.logger.warn(
+        `searchAtPoint failed for layer ${layerIdNum} at (${latNum},${lngNum}): ${error?.message ?? error}`,
+      );
+      return [];
+    }
   }
 
   @Post('search/contour')
@@ -310,11 +327,16 @@ export class NSPDController {
       coordinates: body.coordinates,
     };
 
-    return this.searchService.searchInContourIter(
-      geometry,
-      layerNodes,
-      body.onlyIntersects,
-    );
+    try {
+      return await this.searchService.searchInContourIter(
+        geometry,
+        layerNodes,
+        body.onlyIntersects,
+      );
+    } catch (error: any) {
+      this.logger.warn(`searchInContour failed: ${error?.message ?? error}`);
+      return [];
+    }
   }
 
   // ==================== Tab Data Endpoints ====================
