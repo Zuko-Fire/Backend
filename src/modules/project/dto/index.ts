@@ -105,6 +105,15 @@ export class CreatePolygonDto {
   })
   @IsOptional()
   landPlotId?: number;
+
+  @ApiPropertyOptional({
+    description: 'ID слоя/папки для добавления полигона (как в Figma)',
+    example: 1,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  layerFolderId?: number;
 }
 // update-polygon.dto.ts
 

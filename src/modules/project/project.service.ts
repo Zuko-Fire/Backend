@@ -257,6 +257,27 @@ export class ProjectService {
       role_in_project: ProjectMemberRole.ADMIN,
     });
 
+    // Создаём базовую структуру слоёв (как в Figma — один слой по умолчанию)
+    const folder = await this.layerFolderRepo.save({
+      projectId: saved.id,
+      type: LayerFolderType.FOLDER,
+      name: 'Слои',
+      parentId: null,
+      orderIndex: 0,
+      isVisible: true,
+      isCollapsed: false,
+    });
+
+    await this.layerFolderRepo.save({
+      projectId: saved.id,
+      type: LayerFolderType.LAYER,
+      name: 'Полигоны',
+      parentId: folder.id,
+      orderIndex: 0,
+      isVisible: true,
+      isCollapsed: false,
+    });
+
     return this.findOne(saved.id, ownerId);
   }
 
@@ -330,7 +351,31 @@ export class ProjectService {
        RETURNING *`,
       [dto.name, coordinatesStr, projectId, userId, userId, geometryWkt],
     );
-    return result[0];
+
+    const polygon = result[0];
+
+    // Если указан layerFolderId — автоматически добавляем полигон на слой
+    if (dto.layerFolderId) {
+      const folder = await this.layerFolderRepo.findOne({
+        where: { id: dto.layerFolderId, projectId },
+      });
+      if (!folder) {
+        throw new NotFoundException('Layer folder not found');
+      }
+
+      await this.layerObjectRepo.save({
+        layerFolderId: dto.layerFolderId,
+        polygonId: polygon.id,
+        userId,
+        objectName: dto.name,
+        isVisible: true,
+        isLocked: false,
+        opacity: 1.0,
+        orderIndex: 0,
+      });
+    }
+
+    return polygon;
   }
 
   async updatePolygon(id: number, dto: UpdatePolygonDto, userId: number) {
@@ -1203,9 +1248,9 @@ export class ProjectService {
     }
 
     return this.eventRepo.find({
-      where: { project_id: projectId },
+      where: { projectId },
       relations: ['user'],
-      order: { due_date: 'ASC', createdAt: 'DESC' },
+      order: { dueDate: 'ASC', createdAt: 'DESC' },
     });
   }
 
@@ -1214,8 +1259,9 @@ export class ProjectService {
 
     const event = this.eventRepo.create({
       ...dto,
-      project_id: projectId,
-      user_id: userId,
+      projectId,
+      userId,
+      locationCoordinates: dto.locationCoordinates || (dto.locationLat && dto.locationLng ? { lat: dto.locationLat, lng: dto.locationLng } : null),
     });
 
     return this.eventRepo.save(event);
@@ -1232,13 +1278,21 @@ export class ProjectService {
     }
 
     await this.checkProjectAccess(
-      (event as any)[DB.PROJECT.ID],
+      (event as any).projectId,
       userId,
       ['admin', 'editor'],
     );
 
     if (dto.isDone === true) {
-      (event as any).done_at = new Date();
+      (event as any).doneAt = new Date();
+    }
+
+    // Auto-populate locationCoordinates if lat/lng provided
+    if ((dto.locationLat || dto.locationLng) && !dto.locationCoordinates) {
+      (event as any).locationCoordinates = {
+        lat: dto.locationLat ?? (event as any).locationLat,
+        lng: dto.locationLng ?? (event as any).locationLng,
+      };
     }
 
     Object.assign(event, dto);
@@ -1256,7 +1310,7 @@ export class ProjectService {
     }
 
     await this.checkProjectAccess(
-      (event as any)[DB.PROJECT.ID],
+      (event as any).projectId,
       userId,
       ['admin'],
     );
