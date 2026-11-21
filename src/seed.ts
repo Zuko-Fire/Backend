@@ -666,6 +666,80 @@ async function seed() {
   }
   console.log(`  ✅ ${mapViewCount} map views created`);
 
+  // ---- 8.5. Seed default layers for all projects ----
+  console.log('\n📦 Seeding default layers...');
+  const LayerFolder = dataSource.getRepository('layer_folders');
+  let layerCount = 0;
+  for (const project of PROJECTS) {
+    const existing = await LayerFolder.findOne({
+      where: { projectId: project.id },
+    });
+    if (!existing) {
+      const folder = await LayerFolder.save({
+        projectId: project.id,
+        type: 'folder',
+        name: 'Слои',
+        parentId: null,
+        orderIndex: 0,
+        isVisible: true,
+        isCollapsed: false,
+      });
+      await LayerFolder.save({
+        projectId: project.id,
+        type: 'layer',
+        name: 'Полигоны',
+        parentId: folder.id,
+        orderIndex: 0,
+        isVisible: true,
+        isCollapsed: false,
+      });
+      layerCount++;
+    }
+  }
+  console.log(`  ✅ Базовые слои созданы для ${layerCount} проектов`);
+
+  // ---- 9. Seed Events ----
+  console.log('\n📦 Seeding events...');
+  const Event = dataSource.getRepository('events');
+  let eventCount = 0;
+  const eventTypes = ['note', 'deadline', 'milestone', 'warning', 'meeting', 'field_work'];
+  const eventTitles = [
+    { title: 'Проверить границы участка', goal: 'Выехать на участок для проверки границ', location: 'Участок на ул. Чехова', address: 'г. Таганрог, ул. Чехова, д. 10' },
+    { title: 'Совещание с заказчиком', goal: 'Обсудить план межевания', location: 'Офис заказчика', address: 'г. Таганрог, пр. Ленина, д. 25' },
+    { title: 'Полевые работы', goal: 'Провести геодезическую съемку', location: 'Поле на юге города', address: 'г. Таганрог, ул. Полевая, д. 5' },
+    { title: 'Дедлайн: подготовка документов', goal: 'Подготовить пакет документов для ЕГРН', location: null, address: null },
+    { title: 'Встреча с кадастровым инженером', goal: 'Согласовать координаты поворотных точек', location: 'Бюро кадастровой съемки', address: 'г. Таганрог, ул. Советская, д. 15' },
+  ];
+
+  for (let i = 0; i < 10; i++) {
+    const project = PROJECTS[i % PROJECTS.length];
+    const user = USERS[i % USERS.length];
+    const eventTemplate = eventTitles[i % eventTitles.length];
+    const center = getCenter(project.id);
+    
+    await Event.save({
+      projectId: project.id,
+      userId: user.id,
+      type: eventTypes[i % eventTypes.length],
+      title: eventTemplate.title,
+      description: `Событие для проекта ${project.name}`,
+      goal: eventTemplate.goal,
+      eventDate: new Date(2025, 1 + (i % 11), (i % 28) + 1),
+      eventTime: `${10 + (i % 8)}:${(i * 10) % 60}`,
+      locationName: eventTemplate.location,
+      locationLat: center.lat + (Math.random() - 0.5) * 0.005,
+      locationLng: center.lon + (Math.random() - 0.5) * 0.005,
+      locationAddress: eventTemplate.address,
+      locationCoordinates: eventTemplate.location
+        ? { lat: center.lat + (Math.random() - 0.5) * 0.005, lng: center.lon + (Math.random() - 0.5) * 0.005 }
+        : null,
+      dueDate: new Date(2025, 2 + (i % 10), (i % 28) + 1),
+      isDone: i % 3 === 0,
+    });
+    eventCount++;
+  }
+  console.log(`  ✅ ${eventCount} events created`);
+
   // ---- Done ----
   console.log('\n🎉 Seed complete!');
   console.log('📊 Summary:');
@@ -677,6 +751,8 @@ async function seed() {
   console.log(`   - ${PROJECTS.length} polygons`);
   console.log(`   - ${PROJECTS.length} land plots`);
   console.log(`   - 20 map views`);
+  console.log(`   - 10 events`);
+  console.log(`   - ${PROJECTS.length} projects with default layers`);
   console.log('\n📝 Login credentials:');
   console.log(`   Admin: admin@seeads.ru / Admin@123456`);
   console.log(`   User 2: ivanov@seeads.ru / Password@1`);

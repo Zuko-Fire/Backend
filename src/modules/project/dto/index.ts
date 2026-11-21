@@ -24,6 +24,11 @@ export * from './land-plot-response.dto';
 export * from './document-response.dto';
 export * from './map-view-response.dto';
 export * from './project-member-response.dto';
+export * from './layer-folder.dto';
+export * from './layer-object.dto';
+export * from './comment.dto';
+export * from './event.dto';
+export * from './update-land-plot.dto';
 
 export class CreateProjectDto {
   @ApiProperty({
@@ -100,6 +105,15 @@ export class CreatePolygonDto {
   })
   @IsOptional()
   landPlotId?: number;
+
+  @ApiPropertyOptional({
+    description: 'ID слоя/папки для добавления полигона (как в Figma)',
+    example: 1,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  layerFolderId?: number;
 }
 // update-polygon.dto.ts
 
