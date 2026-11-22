@@ -18,29 +18,27 @@ async function runMigrations() {
     migrations: ['dist/migrations/*{.ts,.js}'],
     migrationsRun: false,
     synchronize: false,
-    logging: true,
+    logging: false,
   });
 
   try {
     console.log('🔄 Инициализация DataSource...');
     await dataSource.initialize();
 
-    console.log('📋 Проверка ожидающих миграций...');
-    const pending = await dataSource.showMigrations();
-    if (!pending) {
-      console.log('✅ Нет ожидающих миграций');
-    } else {
-      console.log('🔧 Применение миграций...');
-      await dataSource.runMigrations();
-      console.log('✅ Миграции успешно применены');
-    }
+    console.log('🔧 Применение миграций...');
+    await dataSource.runMigrations();
+    console.log('✅ Миграции успешно применены');
 
     await dataSource.destroy();
     console.log('✨ Готово!');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Ошибка миграций:', error);
-    await dataSource.destroy();
+    console.error('❌ Ошибка миграций:', error.message);
+    try {
+      await dataSource.destroy();
+    } catch (e) {
+      // ignore
+    }
     process.exit(1);
   }
 }
