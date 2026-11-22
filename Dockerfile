@@ -43,5 +43,5 @@ RUN addgroup -g 1001 -S nodejs \
 USER nestjs
 EXPOSE 4000
 
-# Сначала миграции, потом seed, потом приложение
-CMD ["sh", "-c", "node dist/migrate.js && node dist/seed.js && node dist/main.js"]
+# Сначала миграции, потом seed (не фатален), потом приложение
+CMD ["sh", "-c", "node dist/migrate.js && node dist/seed.js || echo '⚠️ Seed skipped' && node dist/main.js"]
